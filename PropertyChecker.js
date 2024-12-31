@@ -134,10 +134,12 @@ function getPropertyData() {
                 const row = document.createElement('tr');
                 const displayStatus = prop.offerMade ? 'Offered' : prop.status;
                 
-                // Add background color based on days left
+                // Add background color based on days left or offer status
                 const daysLeft = parseInt(prop.daysLeft);
                 let rowStyle = '';
-                if (daysLeft === 0) {
+                if (prop.offerMade) {
+                    rowStyle = 'background-color: rgba(0, 255, 0, 0.1);'; // subtle green for offered properties
+                } else if (daysLeft === 0) {
                     rowStyle = 'background-color: rgba(255, 0, 0, 0.1);'; // subtle red for 0 days
                 } else if (daysLeft <= 10) {
                     rowStyle = 'background-color: rgba(255, 165, 0, 0.1);'; // subtle orange for 1-10 days
