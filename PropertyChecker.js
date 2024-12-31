@@ -11,16 +11,51 @@
 (function() {
     'use strict';
 
+    // Constants for styling
+    const STYLES = {
+        container: 'margin: 20px; background: #2d2d2d; padding: 15px; border-radius: 5px;',
+        button: 'background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;',
+        tableCell: 'padding: 8px; border-bottom: 1px solid #444; color: #fff;',
+        statusColors: {
+            offered: 'rgba(0, 255, 0, 0.1)',
+            expired: 'rgba(255, 0, 0, 0.1)',
+            warning: 'rgba(255, 165, 0, 0.1)',
+            hover: 'rgba(255, 255, 255, 0.1)'
+        }
+    };
+
+    /**
+     * Creates a styled button element
+     * @param {string} text - Button text
+     * @param {string} id - Button ID
+     * @returns {string} HTML button string
+     */
+    function createButton(text, id) {
+        return `<button id="${id}" style="${STYLES.button}">${text}</button>`;
+    }
+
+    /**
+     * Determines the background color for a property row
+     * @param {Object} property - Property data
+     * @returns {string} CSS background-color value
+     */
+    function getPropertyRowColor(property) {
+        if (property.offerMade) return STYLES.statusColors.offered;
+        if (property.daysLeft === 0) return STYLES.statusColors.expired;
+        if (property.daysLeft <= 10) return STYLES.statusColors.warning;
+        return '';
+    }
+
     function createPropertiesTable() {
         const tableHTML = `
-            <div class="properties-container" style="margin: 20px; background: #2d2d2d; padding: 15px; border-radius: 5px;">
+            <div class="properties-container" style="${STYLES.container}">
                 <div class="properties-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; cursor: pointer;">
                     <h2 style="color: #fff; margin: 0;">Properties Manager</h2>
                     <span class="collapse-icon" style="color: #fff; font-size: 20px;">▶</span>
                 </div>
                 <div class="properties-content" style="display: none;">
                     <div style="margin-bottom: 15px; text-align: right;">
-                        <button id="refresh-properties" style="background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Refresh</button>
+                        <button id="refresh-properties" style="${STYLES.button}">Refresh</button>
                     </div>
                     <table style="width: 100%; border-collapse: collapse; color: #fff;">
                         <thead>
@@ -39,8 +74,8 @@
                         <span id="page-info" style="color: #fff; display: inline-block; padding: 5px 10px; background: rgba(0,0,0,0.2); border-radius: 4px;">Page 1</span>
                     </div>
                     <div class="pagination" style="margin-top: 15px; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 100%; overflow: hidden;">
-                        <button id="prev-page" style="background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Previous</button>
-                        <button id="next-page" style="background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Next</button>
+                        <button id="prev-page" style="${STYLES.button}">Previous</button>
+                        <button id="next-page" style="${STYLES.button}">Next</button>
                     </div>
                 </div>
             </div>`;
@@ -84,16 +119,25 @@
         }
     }
 
+    /**
+     * Handles API errors and displays appropriate messages
+     * @param {Object} error - Error object
+     */
+    function handleApiError(error) {
+        console.error('Error fetching property data:', error);
+        const message = error.message.includes('API Error') 
+            ? error.message 
+            : 'Error fetching property data. Please check your API key and try again.';
+        alert(message);
+    }
 
-function getPropertyData() {
-    // Get API key from storage or prompt user
-    const apiKey = localStorage.getItem('tornApiKey') || prompt('Please enter your Torn API key:');
-    
-    if (apiKey) {
-        // Store the API key for future use
+    function getPropertyData() {
+        const apiKey = localStorage.getItem('tornApiKey') || prompt('Please enter your Torn API key:');
+        
+        if (!apiKey) return;
+        
         localStorage.setItem('tornApiKey', apiKey);
         
-        // Fetch data from Torn API
         fetch(`https://api.torn.com/v2/user?key=${apiKey}&selections=properties&stat=rented&sort=ASC`)
             .then(response => response.json())
             .then(data => {
@@ -101,34 +145,31 @@ function getPropertyData() {
                     throw new Error(`API Error: ${data.error.error}`);
                 }
                 
-                // Transform API data and check localStorage for offers
+                if (!data.properties) {
+                    throw new Error('Invalid API response: missing properties data');
+                }
+                
                 const properties = Object.entries(data.properties)
                     .filter(([_, prop]) => 
                         prop.status !== "Owned by their spouse" && 
                         !(prop.rented === null && prop.upkeep > 0)
                     )
-                    .map(([id, prop]) => {
-                        const offerMade = localStorage.getItem(`property_offer_${id}`);
-                        return {
-                            propertyId: id,
-                            name: prop.property,
-                            status: prop.rented ? "Rented" : "Available",
-                            daysLeft: prop.rented ? prop.rented.days_left : 0,
-                            renew: 'https://www.torn.com/properties.php#/p=options&ID=' + id + '&tab=offerExtension',
-                            offerMade: offerMade ? new Date(offerMade).toLocaleDateString() : null
-                        };
-                    })
+                    .map(([id, prop]) => ({
+                        propertyId: id,
+                        name: prop.property,
+                        status: prop.rented ? "Rented" : "Available",
+                        daysLeft: prop.rented ? prop.rented.days_left : 0,
+                        renew: `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=offerExtension`,
+                        offerMade: localStorage.getItem(`property_offer_${id}`)
+                            ? new Date(localStorage.getItem(`property_offer_${id}`)).toLocaleDateString()
+                            : null
+                    }))
                     .sort((a, b) => a.daysLeft - b.daysLeft);
                 
                 updateTable(properties);
             })
-            .catch(error => {
-                console.error('Error fetching property data:', error);
-                alert('Error fetching property data. Please check your API key and try again.');
-            });
+            .catch(handleApiError);
     }
-}
-
 
     function updateTable(properties) {
         const tbody = document.getElementById('properties-table-body');
@@ -151,46 +192,26 @@ function getPropertyData() {
             pageProperties.forEach(prop => {
                 const row = document.createElement('tr');
                 const displayStatus = prop.offerMade ? 'Offered' : prop.status;
+                const baseColor = getPropertyRowColor(prop);
                 
-                // Add background color based on days left or offer status
-                const daysLeft = parseInt(prop.daysLeft);
-                let rowStyle = '';
-                if (prop.offerMade) {
-                    rowStyle = 'background-color: rgba(0, 255, 0, 0.1);'; // subtle green for offered properties
-                } else if (daysLeft === 0) {
-                    rowStyle = 'background-color: rgba(255, 0, 0, 0.1);'; // subtle red for 0 days
-                } else if (daysLeft <= 10) {
-                    rowStyle = 'background-color: rgba(255, 165, 0, 0.1);'; // subtle orange for 1-10 days
-                }
+                row.style.cssText = `transition: background-color 0.2s ease; cursor: pointer; background-color: ${baseColor};`;
                 
-                // Add hover transition and cursor style
-                row.style.cssText = 'transition: background-color 0.2s ease; cursor: pointer;';
-                
-                // Add hover effect with JavaScript
+                // Simplified hover handlers
                 row.addEventListener('mouseenter', () => {
-                    row.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'; // subtle white overlay on hover
+                    row.style.backgroundColor = STYLES.statusColors.hover;
                 });
                 
                 row.addEventListener('mouseleave', () => {
-                    // Return to original background color
-                    if (prop.offerMade) {
-                        row.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
-                    } else if (daysLeft === 0) {
-                        row.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
-                    } else if (daysLeft <= 10) {
-                        row.style.backgroundColor = 'rgba(255, 165, 0, 0.1)';
-                    } else {
-                        row.style.backgroundColor = '';
-                    }
+                    row.style.backgroundColor = baseColor;
                 });
 
                 row.innerHTML = `
-                    <td style="padding: 8px; border-bottom: 1px solid #444; color: #fff; ${rowStyle}">${prop.propertyId}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #444; color: #fff; ${rowStyle}">${prop.name}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #444; color: #fff; ${rowStyle}">${displayStatus}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #444; color: #fff; ${rowStyle}">${prop.daysLeft}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #444; color: #fff; ${rowStyle}">
-                        <a href="${prop.renew}" target="_blank" style="color: #fff; text-decoration: none; background: #444; padding: 4px 8px; border-radius: 3px; display: inline-block; transition: background 0.2s;">Renew</a>
+                    <td style="${STYLES.tableCell}">${prop.propertyId}</td>
+                    <td style="${STYLES.tableCell}">${prop.name}</td>
+                    <td style="${STYLES.tableCell}">${displayStatus}</td>
+                    <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
+                    <td style="${STYLES.tableCell}">
+                        <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">Renew</a>
                     </td>
                 `;
                 tbody.appendChild(row);
