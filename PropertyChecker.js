@@ -149,6 +149,18 @@
                     throw new Error('Invalid API response: missing properties data');
                 }
                 
+                // Check and clean up localStorage before processing properties
+                Object.entries(data.properties).forEach(([id, prop]) => {
+                    const storedDaysLeft = localStorage.getItem(`property_offer_${id}`);
+                    if (storedDaysLeft && (
+                        (prop.rented && prop.rented.days_left > parseInt(storedDaysLeft)) || // Renewal successful
+                        (prop.rented && prop.rented.days_left === 0) || // Rental expired
+                        (!prop.rented) // Property no longer rented
+                    )) {
+                        localStorage.removeItem(`property_offer_${id}`);
+                    }
+                });
+                
                 const properties = Object.entries(data.properties)
                     .filter(([_, prop]) => 
                         prop.status !== "Owned by their spouse" && 
@@ -160,13 +172,17 @@
                         status: prop.rented ? "Rented" : "Available",
                         daysLeft: prop.rented ? prop.rented.days_left : 0,
                         renew: `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=offerExtension`,
-                        offerMade: localStorage.getItem(`property_offer_${id}`)
-                            ? new Date(localStorage.getItem(`property_offer_${id}`)).toLocaleDateString()
-                            : null
+                        offerMade: localStorage.getItem(`property_offer_${id}`) || null
                     }))
                     .sort((a, b) => a.daysLeft - b.daysLeft);
                 
                 updateTable(properties);
+                
+                // Store the days left for each property
+                properties.forEach(prop => {
+                    window.propertyDaysLeft = window.propertyDaysLeft || {};
+                    window.propertyDaysLeft[prop.propertyId] = prop.daysLeft;
+                });
             })
             .catch(handleApiError);
     }
@@ -246,7 +262,6 @@
 
     // Add new function to observe offer submissions
     function observeOfferSubmissions() {
-        // Check if we're on an offer extension page
         const url = new URL(window.location.href);
         if (url.hash.includes('tab=offerExtension')) {
             const propertyId = url.hash.match(/ID=(\d+)/)?.[1];
@@ -254,16 +269,17 @@
 
             console.log('Observing for offer submissions on property:', propertyId);
 
-            // Watch for the "NEXT" input
             const observer = new MutationObserver((mutations, obs) => {
-                const nextButton = document.querySelector('input[type="submit"][value="NEXT"]');
+                const nextButton = document.querySelector('input[type="submit"][value="SEND OFFER"]');
                 
                 if (nextButton && !nextButton.dataset.listenerAttached) {
                     console.log('Found next button');
                     nextButton.dataset.listenerAttached = 'true';
                     nextButton.addEventListener('click', () => {
                         console.log('Next button clicked');
-                        localStorage.setItem(`property_offer_${propertyId}`, new Date().toISOString());
+                        // Store the days left instead of the date
+                        const daysLeft = window.propertyDaysLeft?.[propertyId] || 0;
+                        localStorage.setItem(`property_offer_${propertyId}`, daysLeft.toString());
                     });
                 }
             });
