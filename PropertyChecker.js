@@ -163,6 +163,27 @@ function getPropertyData() {
                     rowStyle = 'background-color: rgba(255, 165, 0, 0.1);'; // subtle orange for 1-10 days
                 }
                 
+                // Add hover transition and cursor style
+                row.style.cssText = 'transition: background-color 0.2s ease; cursor: pointer;';
+                
+                // Add hover effect with JavaScript
+                row.addEventListener('mouseenter', () => {
+                    row.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'; // subtle white overlay on hover
+                });
+                
+                row.addEventListener('mouseleave', () => {
+                    // Return to original background color
+                    if (prop.offerMade) {
+                        row.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
+                    } else if (daysLeft === 0) {
+                        row.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
+                    } else if (daysLeft <= 10) {
+                        row.style.backgroundColor = 'rgba(255, 165, 0, 0.1)';
+                    } else {
+                        row.style.backgroundColor = '';
+                    }
+                });
+
                 row.innerHTML = `
                     <td style="padding: 8px; border-bottom: 1px solid #444; color: #fff; ${rowStyle}">${prop.propertyId}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #444; color: #fff; ${rowStyle}">${prop.name}</td>
