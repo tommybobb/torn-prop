@@ -25,11 +25,11 @@
                     <table style="width: 100%; border-collapse: collapse; color: #fff;">
                         <thead>
                             <tr>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444;">Property ID</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444;">Property Name</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444;">Status</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444;">Days Left</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444;">Renew</th>
+                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property ID</th>
+                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
+                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
+                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
+                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
                             </tr>
                         </thead>
                         <tbody id="properties-table-body">
