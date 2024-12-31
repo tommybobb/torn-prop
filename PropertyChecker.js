@@ -6,6 +6,7 @@
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
 // @grant        none
+// @run-at       document-start
 // ==/UserScript==
 
 (function() {
@@ -46,7 +47,41 @@
         return '';
     }
 
+    function createApiKeyForm() {
+        return `
+            <div class="properties-container" style="${STYLES.container}">
+                <div style="text-align: center;">
+                    <h2 style="color: #fff; margin-bottom: 15px;">Properties Manager</h2>
+                    <p style="color: #fff; margin-bottom: 15px;">Please enter your Torn API key to continue:</p>
+                    <input type="text" id="torn-api-key" style="padding: 5px; margin-right: 10px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;">
+                    <button id="submit-api-key" style="${STYLES.button}">Submit</button>
+                </div>
+            </div>`;
+    }
+
     function createPropertiesTable() {
+        // Check for API key first
+        const apiKey = localStorage.getItem('tornApiKey');
+        if (!apiKey) {
+            const targetElement = document.querySelector('.content-wrapper');
+            if (targetElement) {
+                targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm());
+                
+                // Add submit handler
+                document.getElementById('submit-api-key').addEventListener('click', () => {
+                    const keyInput = document.getElementById('torn-api-key');
+                    const newApiKey = keyInput.value.trim();
+                    if (newApiKey) {
+                        localStorage.setItem('tornApiKey', newApiKey);
+                        // Remove the form and create the table
+                        document.querySelector('.properties-container').remove();
+                        createPropertiesTable();
+                    }
+                });
+            }
+            return;
+        }
+
         const tableHTML = `
             <div class="properties-container" style="${STYLES.container}">
                 <div class="properties-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; cursor: pointer;">
@@ -132,11 +167,11 @@
     }
 
     function getPropertyData() {
-        const apiKey = localStorage.getItem('tornApiKey') || prompt('Please enter your Torn API key:');
-        
-        if (!apiKey) return;
-        
-        localStorage.setItem('tornApiKey', apiKey);
+        const apiKey = localStorage.getItem('tornApiKey');
+        if (!apiKey) {
+            // The table shouldn't exist without an API key now
+            return;
+        }
         
         fetch(`https://api.torn.com/v2/user?key=${apiKey}&selections=properties&stat=rented&sort=ASC`)
             .then(response => response.json())
