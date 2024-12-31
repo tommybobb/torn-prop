@@ -19,6 +19,9 @@
                     <span class="collapse-icon" style="color: #fff; font-size: 20px;">▶</span>
                 </div>
                 <div class="properties-content" style="display: none;">
+                    <div style="margin-bottom: 15px; text-align: right;">
+                        <button id="refresh-properties" style="background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Refresh</button>
+                    </div>
                     <table style="width: 100%; border-collapse: collapse; color: #fff;">
                         <thead>
                             <tr>
@@ -46,13 +49,15 @@
         if (targetElement) {
             targetElement.insertAdjacentHTML('afterbegin', tableHTML);
             
-            // Add click handler for collapse/expand
+            // Add variable declarations at the top
             const header = document.querySelector('.properties-header');
             const content = document.querySelector('.properties-content');
             const icon = document.querySelector('.collapse-icon');
+            const refreshButton = document.getElementById('refresh-properties');
             let dataFetched = false;
+            let lastRefreshTime = 0;
             
-            header.addEventListener('click', () => {
+            header.addEventListener('click', (e) => {
                 const isVisible = content.style.display !== 'none';
                 content.style.display = isVisible ? 'none' : 'block';
                 icon.textContent = isVisible ? '▶' : '▼';
@@ -61,6 +66,19 @@
                 if (!isVisible && !dataFetched) {
                     getPropertyData();
                     dataFetched = true;
+                }
+            });
+
+            refreshButton.addEventListener('click', () => {
+                const currentTime = Date.now();
+                const timeSinceLastRefresh = currentTime - lastRefreshTime;
+                
+                if (timeSinceLastRefresh >= 60000) { // 60000ms = 1 minute
+                    getPropertyData();
+                    lastRefreshTime = currentTime;
+                } else {
+                    const secondsRemaining = Math.ceil((60000 - timeSinceLastRefresh) / 1000);
+                    alert(`Please wait ${secondsRemaining} seconds before refreshing again.`);
                 }
             });
         }
