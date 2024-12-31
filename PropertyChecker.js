@@ -168,6 +168,7 @@
 
     function getPropertyData() {
         const apiKey = localStorage.getItem('tornApiKey');
+        const currentPropertyId = localStorage.getItem('currentPropertyId');
         if (!apiKey) {
             // The table shouldn't exist without an API key now
             return;
@@ -197,17 +198,18 @@
                 });
                 
                 const properties = Object.entries(data.properties)
-                    .filter(([_, prop]) => 
+                    .filter(([id, prop]) => 
                         prop.status !== "Owned by their spouse" && 
-                        !(prop.rented === null && prop.upkeep > 0)
+                        id !== currentPropertyId
                     )
                     .map(([id, prop]) => ({
                         propertyId: id,
                         name: prop.property,
                         status: prop.rented ? "Rented" : "Available",
                         daysLeft: prop.rented ? prop.rented.days_left : 0,
-                        renew: `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=offerExtension`,
-                        offerMade: localStorage.getItem(`property_offer_${id}`) || null
+                        renew: prop.rented ?`https://www.torn.com/properties.php#/p=options&ID=${id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=lease`,
+                        offerMade: localStorage.getItem(`property_offer_${id}`) || null,
+                        buttonValue: prop.rented ? "Renew" : "Lease"
                     }))
                     .sort((a, b) => a.daysLeft - b.daysLeft);
                 
@@ -262,7 +264,7 @@
                     <td style="${STYLES.tableCell}">${displayStatus}</td>
                     <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
                     <td style="${STYLES.tableCell}">
-                        <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">Renew</a>
+                        <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">${prop.buttonValue}</a>
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -328,10 +330,35 @@
         }
     }
 
+    // Add this new function after the other API-related functions
+    function getCurrentPropertyId() {
+        const apiKey = localStorage.getItem('tornApiKey');
+        if (!apiKey) return;
+
+        // Only fetch once per minute (60000 milliseconds)
+        const now = Date.now();
+        const lastFetched = localStorage.getItem('propertyId_lastFetched');
+        if (lastFetched && (now - parseInt(lastFetched) < 60000)) {
+            return Promise.resolve(localStorage.getItem('currentPropertyId'));
+        }
+
+        return fetch(`https://api.torn.com/v2/user?key=${apiKey}&selections=profile`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(`API Error: ${data.error.error}`);
+                }
+                localStorage.setItem('currentPropertyId', data.property_id);
+                localStorage.setItem('propertyId_lastFetched', now.toString());
+                return data.property_id;
+            })
+            .catch(handleApiError);
+    }
+
     // Wait for page load and insert table
     window.addEventListener('load', function() {
         createPropertiesTable();
-        getPropertyData();
+        getCurrentPropertyId().then(() => getPropertyData());
         observeOfferSubmissions();
     });
 
