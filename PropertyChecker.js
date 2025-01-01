@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    // Constants for styling
+    // Constants for styling and configuration
     const STYLES = {
         container: 'margin: 20px; background: #2d2d2d; padding: 15px; border-radius: 5px;',
         button: 'background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;',
@@ -24,6 +24,140 @@
             hover: 'rgba(255, 255, 255, 0.1)'
         }
     };
+
+    const CONFIG = {
+        ITEMS_PER_PAGE: 15,
+        REFRESH_COOLDOWN: 60000, // 1 minute in milliseconds
+        MAX_RETRIES: 30,
+        RETRY_DELAY: 100,
+        API_ENDPOINT: 'https://api.torn.com/v2'
+    };
+
+    // Cache DOM queries
+    const getElement = (selector) => document.querySelector(selector);
+    const createElement = (html) => {
+        const div = document.createElement('div');
+        div.innerHTML = html.trim();
+        return div.firstChild;
+    };
+
+    /**
+     * Handles API requests with error handling and rate limiting
+     * @param {string} endpoint - API endpoint
+     * @param {Object} options - Request options
+     * @returns {Promise} API response
+     */
+    async function fetchAPI(endpoint, options = {}) {
+        const apiKey = localStorage.getItem('tornApiKey');
+        if (!apiKey) throw new Error('No API key found');
+
+        try {
+            const response = await fetch(`${CONFIG.API_ENDPOINT}/${endpoint}?key=${apiKey}${options.params || ''}`);
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(`API Error: ${data.error.error}`);
+            }
+            
+            return data;
+        } catch (error) {
+            handleApiError(error);
+            throw error;
+        }
+    }
+
+    /**
+     * Debounces a function
+     * @param {Function} func - Function to debounce
+     * @param {number} wait - Wait time in milliseconds
+     */
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    // Optimize property data processing
+    function processPropertyData(properties) {
+        return Object.entries(properties)
+            .filter(([id, prop]) => 
+                prop.status !== "Owned by their spouse" && 
+                id !== localStorage.getItem('currentPropertyId')
+            )
+            .map(([id, prop]) => ({
+                propertyId: id,
+                name: prop.property,
+                status: prop.rented ? "Rented" : "Available",
+                daysLeft: prop.rented ? prop.rented.days_left : 0,
+                renew: `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=${prop.rented ? 'offerExtension' : 'lease'}`,
+                offerMade: localStorage.getItem(`property_offer_${id}`) || null,
+                costPerDay: prop.rented ? prop.rented.cost_per_day : 0,
+                buttonValue: prop.rented ? "Renew" : "Lease"
+            }))
+            .sort((a, b) => a.daysLeft - b.daysLeft);
+    }
+
+    // Optimize table updates with DocumentFragment
+    function updateTableRows(tbody, properties) {
+        const fragment = document.createDocumentFragment();
+        
+        properties.forEach(prop => {
+            const row = document.createElement('tr');
+            const baseColor = getPropertyRowColor(prop);
+            
+            row.style.cssText = `transition: background-color 0.2s ease; cursor: pointer; background-color: ${baseColor};`;
+            
+            const handleHover = (isHover) => {
+                row.style.backgroundColor = isHover ? STYLES.statusColors.hover : baseColor;
+            };
+            
+            row.addEventListener('mouseenter', () => handleHover(true));
+            row.addEventListener('mouseleave', () => handleHover(false));
+            
+            row.innerHTML = `
+                <td style="${STYLES.tableCell}">${prop.propertyId}</td>
+                <td style="${STYLES.tableCell}">${prop.name}</td>
+                <td style="${STYLES.tableCell}">${prop.offerMade ? 'Offered' : prop.status}</td>
+                <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
+                <td style="${STYLES.tableCell}">
+                    <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">${prop.buttonValue}</a>
+                </td>
+            `;
+            
+            fragment.appendChild(row);
+        });
+        
+        tbody.innerHTML = '';
+        tbody.appendChild(fragment);
+    }
+
+    // Optimize observers with weak references
+    function setupNavigationObserver() {
+        const observer = new MutationObserver(
+            debounce((mutations) => {
+                for (const mutation of mutations) {
+                    if (mutation.type === 'childList' && 
+                        mutation.target.id === 'properties-page-wrap') {
+                        createPropertiesTable();
+                        getCurrentPropertyId();
+                        observeOfferSubmissions();
+                        break;
+                    }
+                }
+            }, 100)
+        );
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
 
     /**
      * Creates a styled button element
@@ -52,7 +186,6 @@
             <div class="properties-container" style="${STYLES.container}">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h2 style="color: #fff; margin: 0;">Properties Manager</h2>
-                    <button id="remove-properties-manager" style="${STYLES.button}; padding: 2px 8px; font-weight: bold;">✕</button>
                 </div>
                 <div style="text-align: center;">
                     <p style="color: #fff; margin-bottom: 15px;">Please enter your Torn API key to continue:</p>
@@ -93,11 +226,6 @@
 
         if (!apiKey && targetElement) {
             targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm());
-            
-            // Add remove button handler for API form
-            document.getElementById('remove-properties-manager').addEventListener('click', function() {
-                document.querySelector('.properties-container').remove();
-            });
 
             // Add API key submission handler
             document.getElementById('submit-api-key').addEventListener('click', function() {
@@ -117,7 +245,6 @@
                 <div class="properties-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h2 style="color: #fff; margin: 0; cursor: pointer;">Properties Manager</h2>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <button id="remove-properties-manager" style="${STYLES.button}; padding: 2px 8px; font-weight: bold;">✕</button>
                         <span class="collapse-icon" style="color: #fff; font-size: 20px; cursor: pointer;">▶</span>
                     </div>
                 </div>
@@ -151,12 +278,6 @@
         if (targetElement) {
             targetElement.insertAdjacentHTML('afterbegin', tableHTML);
             
-            // Add remove button handler
-            document.getElementById('remove-properties-manager').addEventListener('click', function(e) {
-                e.stopPropagation(); // Prevent event from bubbling to header
-                document.querySelector('.properties-container').remove();
-            });
-
             // Add variable declarations at the top
             const header = document.querySelector('.properties-header');
             const content = document.querySelector('.properties-content');
@@ -165,18 +286,15 @@
             let dataFetched = false;
             let lastRefreshTime = 0;
             
-            header.addEventListener('click', (e) => {
-                // Only toggle if the click wasn't on the remove button
-                if (!e.target.matches('#remove-properties-manager')) {
-                    const isVisible = content.style.display !== 'none';
-                    content.style.display = isVisible ? 'none' : 'block';
-                    icon.textContent = isVisible ? '▶' : '▼';
-                    
-                    // Only fetch data the first time we expand
-                    if (!isVisible && !dataFetched) {
-                        getPropertyData();
-                        dataFetched = true;
-                    }
+            header.addEventListener('click', () => {
+                const isVisible = content.style.display !== 'none';
+                content.style.display = isVisible ? 'none' : 'block';
+                icon.textContent = isVisible ? '▶' : '▼';
+                
+                // Only fetch data the first time we expand
+                if (!isVisible && !dataFetched) {
+                    getPropertyData();
+                    dataFetched = true;
                 }
             });
 
@@ -349,7 +467,7 @@
             console.log('Observing for offer submissions on property:', propertyId);
 
             const observer = new MutationObserver((mutations, obs) => {
-                const nextButton = document.querySelector('input[type="submit"][value="SEND OFFER"]');
+                const nextButton = document.querySelector('input[type="submit"][value="NEXT"]');
                 
                 if (nextButton && !nextButton.dataset.listenerAttached) {
                     console.log('Found next button');
@@ -397,47 +515,25 @@
             .catch(handleApiError);
     }
 
-    // Add this function to handle React navigation
-    function setupNavigationObserver() {
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (mutation.type === 'childList' && 
-                    mutation.target.id === 'properties-page-wrap') {
-                    // React has updated the properties page
-                    createPropertiesTable();
-                    getCurrentPropertyId();
-                    observeOfferSubmissions();
-                }
-            }
-        });
-
-        // Start observing the body for the properties-page-wrap element
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-    }
-
-    // Modify the load event listener to include the navigation observer
+    // Initialize the script
     window.addEventListener('load', function() {
         let attempts = 0;
-        const maxAttempts = 30; // 3 seconds maximum wait time
         
         const checkForElement = setInterval(() => {
             attempts++;
-            const targetElement = document.querySelector('#properties-page-wrap');
+            const targetElement = getElement('#properties-page-wrap');
             
             if (targetElement) {
                 clearInterval(checkForElement);
                 createPropertiesTable();
                 getCurrentPropertyId();
                 observeOfferSubmissions();
-                setupNavigationObserver(); // Add the navigation observer
-            } else if (attempts >= maxAttempts) {
+                setupNavigationObserver();
+            } else if (attempts >= CONFIG.MAX_RETRIES) {
                 clearInterval(checkForElement);
-                console.error('Properties Manager: Failed to initialize after 3 seconds');
+                console.error('Properties Manager: Failed to initialize');
             }
-        }, 100);
+        }, CONFIG.RETRY_DELAY);
     });
 
     // Listen for URL changes (for single-page app navigation)
