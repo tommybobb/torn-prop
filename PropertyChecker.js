@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -49,12 +49,15 @@
 
     function createApiKeyForm() {
         return `
-            <div class="properties-container" style="${STYLES.container}">
-                <div style="text-align: center;">
-                    <h2 style="color: #fff; margin-bottom: 15px;">Properties Manager</h2>
-                    <p style="color: #fff; margin-bottom: 15px;">Please enter your Torn API key to continue:</p>
-                    <input type="text" id="torn-api-key" style="padding: 5px; margin-right: 10px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;">
-                    <button id="submit-api-key" style="${STYLES.button}">Submit</button>
+            <div style="position: relative;">
+                <button id="remove-properties-manager" style="${STYLES.button}; position: absolute; right: -30px; top: 0; padding: 2px 8px; font-weight: bold;">✕</button>
+                <div class="properties-container" style="${STYLES.container}">
+                    <div style="text-align: center;">
+                        <h2 style="color: #fff; margin-bottom: 15px;">Properties Manager</h2>
+                        <p style="color: #fff; margin-bottom: 15px;">Please enter your Torn API key to continue:</p>
+                        <input type="text" id="torn-api-key" style="padding: 5px; margin-right: 10px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;">
+                        <button id="submit-api-key" style="${STYLES.button}">Submit</button>
+                    </div>
                 </div>
             </div>`;
     }
@@ -67,63 +70,76 @@
 
         // Check for API key first
         const apiKey = localStorage.getItem('tornApiKey');
-        if (!apiKey) {
-            const targetElement = document.querySelector('.content-wrapper');
-            if (targetElement) {
-                targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm());
-                
-                // Add submit handler
-                document.getElementById('submit-api-key').addEventListener('click', () => {
-                    const keyInput = document.getElementById('torn-api-key');
-                    const newApiKey = keyInput.value.trim();
-                    if (newApiKey) {
-                        localStorage.setItem('tornApiKey', newApiKey);
-                        // Remove the form and create the table
-                        document.querySelector('.properties-container').remove();
-                        createPropertiesTable();
-                    }
-                });
-            }
+        const targetElement = document.querySelector('.content-wrapper');
+        
+        if (!apiKey && targetElement) {
+            targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm());
+            
+            // Add remove button handler
+            document.getElementById('remove-properties-manager').addEventListener('click', function() {
+                const container = this.closest('div');
+                container.remove();
+            });
+
+            // Add API key submission handler
+            document.getElementById('submit-api-key').addEventListener('click', function() {
+                const apiKeyInput = document.getElementById('torn-api-key');
+                if (apiKeyInput.value) {
+                    localStorage.setItem('tornApiKey', apiKeyInput.value);
+                    const container = document.querySelector('.properties-container').parentElement;
+                    container.remove();
+                    createPropertiesTable();
+                }
+            });
+
             return;
         }
 
         const tableHTML = `
-            <div class="properties-container" style="${STYLES.container}">
-                <div class="properties-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; cursor: pointer;">
-                    <h2 style="color: #fff; margin: 0;">Properties Manager</h2>
-                    <span class="collapse-icon" style="color: #fff; font-size: 20px;">▶</span>
-                </div>
-                <div class="properties-content" style="display: none;">
-                    <div style="margin-bottom: 15px; text-align: right;">
-                        <button id="refresh-properties" style="${STYLES.button}">Refresh</button>
+            <div style="position: relative;">
+                <button id="remove-properties-manager" style="${STYLES.button}; position: absolute; right: -30px; top: 0; padding: 2px 8px; font-weight: bold;">✕</button>
+                <div class="properties-container" style="${STYLES.container}">
+                    <div class="properties-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; cursor: pointer;">
+                        <h2 style="color: #fff; margin: 0;">Properties Manager</h2>
+                        <span class="collapse-icon" style="color: #fff; font-size: 20px;">▶</span>
                     </div>
-                    <table style="width: 100%; border-collapse: collapse; color: #fff;">
-                        <thead>
-                            <tr>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property ID</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
-                            </tr>
-                        </thead>
-                        <tbody id="properties-table-body">
-                        </tbody>
-                    </table>
-                    <div class="page-info-row" style="text-align: center; margin: 10px 0;">
-                        <span id="page-info" style="color: #fff; display: inline-block; padding: 5px 10px; background: rgba(0,0,0,0.2); border-radius: 4px;">Page 1</span>
-                    </div>
-                    <div class="pagination" style="margin-top: 15px; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 100%; overflow: hidden;">
-                        <button id="prev-page" style="${STYLES.button}">Previous</button>
-                        <button id="next-page" style="${STYLES.button}">Next</button>
+                    <div class="properties-content" style="display: none;">
+                        <div style="margin-bottom: 15px; text-align: right;">
+                            <button id="refresh-properties" style="${STYLES.button}">Refresh</button>
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; color: #fff;">
+                            <thead>
+                                <tr>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property ID</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
+                                </tr>
+                            </thead>
+                            <tbody id="properties-table-body">
+                            </tbody>
+                        </table>
+                        <div class="page-info-row" style="text-align: center; margin: 10px 0;">
+                            <span id="page-info" style="color: #fff; display: inline-block; padding: 5px 10px; background: rgba(0,0,0,0.2); border-radius: 4px;">Page 1</span>
+                        </div>
+                        <div class="pagination" style="margin-top: 15px; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 100%; overflow: hidden;">
+                            <button id="prev-page" style="${STYLES.button}">Previous</button>
+                            <button id="next-page" style="${STYLES.button}">Next</button>
+                        </div>
                     </div>
                 </div>
             </div>`;
 
-        const targetElement = document.querySelector('.content-wrapper');
         if (targetElement) {
             targetElement.insertAdjacentHTML('afterbegin', tableHTML);
             
+            // Add remove button handler
+            document.getElementById('remove-properties-manager').addEventListener('click', function() {
+                this.remove();
+                document.querySelector('.properties-container').remove();
+            });
+
             // Add variable declarations at the top
             const header = document.querySelector('.properties-header');
             const content = document.querySelector('.properties-content');
