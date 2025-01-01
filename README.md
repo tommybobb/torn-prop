@@ -17,7 +17,7 @@ A Tampermonkey userscript that enhances the property management experience on To
 ## Installation
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) for your browser
-2. Click [here](#) to install the script (TODO: Add installation link)
+2. Click [here](https://greasyfork.org/en/scripts/522408-torn-properties-manager) to install the script 
 3. Visit [Torn's properties page](https://www.torn.com/properties.php)
 4. Enter your API key when prompted (only required once)
 
