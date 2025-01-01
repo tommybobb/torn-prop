@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -70,8 +70,14 @@
 
         // Check for API key first
         const apiKey = localStorage.getItem('tornApiKey');
-        const targetElement = document.querySelector('.content-wrapper');
+        const targetElement = document.querySelector('#properties-page-wrap');
         
+        // Wait for target element to exist
+        if (!targetElement) {
+            setTimeout(createPropertiesTable, 100); // Retry after 100ms
+            return;
+        }
+
         if (!apiKey && targetElement) {
             targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm());
             
@@ -380,9 +386,15 @@
 
     // Wait for page load and insert table
     window.addEventListener('load', function() {
-        createPropertiesTable();
-        getCurrentPropertyId();
-        observeOfferSubmissions();
+        // Wait for the properties page wrap to be ready
+        const checkForElement = setInterval(() => {
+            if (document.querySelector('#properties-page-wrap')) {
+                clearInterval(checkForElement);
+                createPropertiesTable();
+                getCurrentPropertyId();
+                observeOfferSubmissions();
+            }
+        }, 100);
     });
 
     // Listen for URL changes (for single-page app navigation)
