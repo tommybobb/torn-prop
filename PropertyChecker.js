@@ -405,18 +405,36 @@
                     <div style="display: flex; gap: 20px;">
                         <!-- Revenue Stats Section -->
                         <div style="flex: 1;">
-                            <h3 style="color: #fff; margin: 0 0 10px 0;">Revenue Stats</h3>
-                            <div style="color: #fff; margin: 5px 0;">
-                                Total Properties: <span class="total-properties">0</span>
-                            </div>
-                            <div style="color: #fff; margin: 5px 0;">
-                                Daily Revenue: $<span class="daily-revenue">0</span>
-                            </div>
-                            <div style="color: #fff; margin: 5px 0;">
-                                Monthly Revenue: $<span class="monthly-revenue">0</span>
-                            </div>
-                            <div style="color: #fff; margin: 5px 0;">
-                                Annual Revenue: $<span class="annual-revenue">0</span>
+                            <h3 style="color: #fff; margin: 0 0 15px 0;">Revenue Stats</h3>
+                            <div style="color: #888; font-size: 0.8em; margin: -10px 0 15px 0;">(Based on current daily rental rates)</div>
+                            <div style="display: grid; gap: 10px;">
+                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
+                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">🏘️ Total Properties</div>
+                                    <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
+                                        <span class="total-properties">0</span>
+                                    </div>
+                                </div>
+                                
+                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
+                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">💰 Daily Revenue</div>
+                                    <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
+                                        $<span class="daily-revenue">0</span>
+                                    </div>
+                                </div>
+                                
+                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
+                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📅 Monthly Revenue</div>
+                                    <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
+                                        $<span class="monthly-revenue">0</span>
+                                    </div>
+                                </div>
+                                
+                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
+                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📈 Annual Revenue</div>
+                                    <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
+                                        $<span class="annual-revenue">0</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -426,23 +444,52 @@
                         <!-- ROI Calculator Section -->
                         <div style="flex: 1;">
                             <h3 style="color: #fff; margin: 0 0 10px 0;">ROI Calculator</h3>
-                            <div style="color: #fff; margin: 10px 0;">
-                                <label style="display: block; margin-bottom: 5px;">Property Cost ($):</label>
-                                <div style="display: flex;">
-                                    <input type="number" class="pi-cost" style="flex: 1; padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px 0 0 3px; border-right: none;" placeholder="Enter property cost">
-                                    <a href="https://www.torn.com/properties.php?step=sellingmarket#/property=13" target="_blank" style="background: #444; color: #fff; border: 1px solid #666; border-radius: 0 3px 3px 0; padding: 5px 10px; text-decoration: none; display: flex; align-items: center;">🔍</a>
+                            <div style="display: grid; gap: 10px;">
+                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">💵 Property Cost ($)</div>
+                                    <div style="display: flex;">
+                                        <input type="number" class="pi-cost" style="flex: 1; padding: 8px; background: #444; color: #fff; border: 1px solid #666; border-radius: 4px 0 0 4px; border-right: none; font-size: 1.1em;" placeholder="Enter property cost">
+                                        <a href="https://www.torn.com/properties.php?step=sellingmarket#/property=13" target="_blank" style="background: #444; color: #fff; border: 1px solid #666; border-radius: 0 4px 4px 0; padding: 8px 12px; text-decoration: none; display: flex; align-items: center;">🔍</a>
+                                    </div>
                                 </div>
-                            </div>
-                            <div style="color: #fff; margin: 10px 0;">
-                                <label style="display: block; margin-bottom: 5px;">Daily Rent ($):</label>
-                                <input type="number" class="daily-rent" style="width: calc(100% - 10px); padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;" placeholder="Enter daily rent" value="${Math.max(...properties.map(prop => prop.costPerDay || 0))}">
-                            </div>
-                            <button class="calculate-roi" style="background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; width: 100%; margin-top: 10px;">Calculate ROI</button>
-                            <div class="roi-result" style="color: #fff; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; display: none;">
-                                <div>Days to ROI: <span class="days-to-roi">-</span></div>
-                                <div>Months to ROI: <span class="months-to-roi">-</span></div>
-                                <div>Years to ROI: <span class="years-to-roi">-</span></div>
-                                <div><strong>ROI @365 days: <span class="annual-roi">-</span>%</strong></div>
+
+                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">💰 Daily Rent ($)</div>
+                                    <input type="number" class="daily-rent" style="width: calc(100% - 18px); padding: 8px; background: #444; color: #fff; border: 1px solid #666; border-radius: 4px; font-size: 1.1em;" placeholder="Enter daily rent" value="${Math.max(...properties.map(prop => prop.costPerDay || 0))}">
+                                </div>
+
+                                <button class="calculate-roi" style="background: #444; color: #fff; border: 1px solid #666; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; font-size: 1.1em; transition: background 0.2s;">
+                                    Calculate ROI 📊
+                                </button>
+
+                                <div class="roi-result" style="display: none; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+                                    <div style="display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr);">
+                                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
+                                            <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">⏱️ Days to ROI</div>
+                                            <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
+                                                <span class="days-to-roi">-</span>
+                                            </div>
+                                        </div>
+                                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
+                                            <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📅 Months to ROI</div>
+                                            <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
+                                                <span class="months-to-roi">-</span>
+                                            </div>
+                                        </div>
+                                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
+                                            <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📆 Years to ROI</div>
+                                            <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
+                                                <span class="years-to-roi">-</span>
+                                            </div>
+                                        </div>
+                                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
+                                            <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📈 Annual ROI</div>
+                                            <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
+                                                <span class="annual-roi">-</span>%
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
