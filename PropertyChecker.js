@@ -381,7 +381,7 @@
     // Wait for page load and insert table
     window.addEventListener('load', function() {
         createPropertiesTable();
-        getCurrentPropertyId().then(() => getPropertyData());
+        getCurrentPropertyId();
         observeOfferSubmissions();
     });
 
