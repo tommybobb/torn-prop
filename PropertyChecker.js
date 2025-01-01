@@ -395,6 +395,122 @@
         let currentPage = 1;
         const totalPages = Math.ceil(properties.length / itemsPerPage);
         
+        // Add statistics section after pagination
+        const statsSection = document.querySelector('.stats-section') || createElement(`
+            <div class="stats-section" style="margin-top: 15px; text-align: center;">
+                <button class="stats-toggle" style="background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">
+                    Show Statistics ▼
+                </button>
+                <div class="stats-content" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; text-align: left;">
+                    <div style="display: flex; gap: 20px;">
+                        <!-- Revenue Stats Section -->
+                        <div style="flex: 1;">
+                            <h3 style="color: #fff; margin: 0 0 10px 0;">Revenue Stats</h3>
+                            <div style="color: #fff; margin: 5px 0;">
+                                Total Properties: <span class="total-properties">0</span>
+                            </div>
+                            <div style="color: #fff; margin: 5px 0;">
+                                Daily Revenue: $<span class="daily-revenue">0</span>
+                            </div>
+                            <div style="color: #fff; margin: 5px 0;">
+                                Monthly Revenue: $<span class="monthly-revenue">0</span>
+                            </div>
+                            <div style="color: #fff; margin: 5px 0;">
+                                Annual Revenue: $<span class="annual-revenue">0</span>
+                            </div>
+                        </div>
+
+                        <!-- Vertical Divider -->
+                        <div style="width: 1px; background: #444;"></div>
+
+                        <!-- ROI Calculator Section -->
+                        <div style="flex: 1;">
+                            <h3 style="color: #fff; margin: 0 0 10px 0;">ROI Calculator</h3>
+                            <div style="color: #fff; margin: 10px 0;">
+                                <label style="display: block; margin-bottom: 5px;">Property Cost ($):</label>
+                                <div style="display: flex;">
+                                    <input type="number" class="pi-cost" style="flex: 1; padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px 0 0 3px; border-right: none;" placeholder="Enter property cost">
+                                    <a href="https://www.torn.com/properties.php?step=sellingmarket#/property=13" target="_blank" style="background: #444; color: #fff; border: 1px solid #666; border-radius: 0 3px 3px 0; padding: 5px 10px; text-decoration: none; display: flex; align-items: center;">🔍</a>
+                                </div>
+                            </div>
+                            <div style="color: #fff; margin: 10px 0;">
+                                <label style="display: block; margin-bottom: 5px;">Daily Rent ($):</label>
+                                <input type="number" class="daily-rent" style="width: calc(100% - 10px); padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;" placeholder="Enter daily rent" value="${Math.max(...properties.map(prop => prop.costPerDay || 0))}">
+                            </div>
+                            <button class="calculate-roi" style="background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; width: 100%; margin-top: 10px;">Calculate ROI</button>
+                            <div class="roi-result" style="color: #fff; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; display: none;">
+                                <div>Days to ROI: <span class="days-to-roi">-</span></div>
+                                <div>Months to ROI: <span class="months-to-roi">-</span></div>
+                                <div>Years to ROI: <span class="years-to-roi">-</span></div>
+                                <div><strong>ROI @365 days: <span class="annual-roi">-</span>%</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        // Add stats section if it doesn't exist AND if pagination exists
+        const paginationElement = document.querySelector('.pagination');
+        if (!document.querySelector('.stats-section') && paginationElement) {
+            paginationElement.insertAdjacentElement('afterend', statsSection);
+            
+            // Add toggle functionality
+            const toggleBtn = statsSection.querySelector('.stats-toggle');
+            const content = statsSection.querySelector('.stats-content');
+            if (toggleBtn && content) {
+                toggleBtn.addEventListener('click', () => {
+                    const isVisible = content.style.display !== 'none';
+                    content.style.display = isVisible ? 'none' : 'block';
+                    toggleBtn.textContent = `${isVisible ? 'Show' : 'Hide'} Statistics ${isVisible ? '▼' : '▲'}`;
+                });
+            }
+
+            // Add calculation functionality
+            const calculateBtn = statsSection.querySelector('.calculate-roi');
+            const resultDiv = statsSection.querySelector('.roi-result');
+            if (calculateBtn && resultDiv) {
+                calculateBtn.addEventListener('click', () => {
+                    const propertyCost = parseFloat(statsSection.querySelector('.pi-cost')?.value) || 0;
+                    const dailyRent = parseFloat(statsSection.querySelector('.daily-rent')?.value) || 0;
+                    
+                    if (propertyCost && dailyRent) {
+                        const daysToRoi = Math.ceil(propertyCost / dailyRent);
+                        const monthsToRoi = (daysToRoi / 30).toFixed(1);
+                        const yearsToRoi = (daysToRoi / 365).toFixed(1);
+                        
+                        // Calculate annual ROI percentage
+                        const annualReturn = (dailyRent * 365);
+                        const annualRoiPercentage = ((annualReturn / propertyCost) * 100).toFixed(2);
+
+                        resultDiv.style.display = 'block';
+                        resultDiv.querySelector('.days-to-roi').textContent = daysToRoi.toLocaleString();
+                        resultDiv.querySelector('.months-to-roi').textContent = monthsToRoi;
+                        resultDiv.querySelector('.years-to-roi').textContent = yearsToRoi;
+                        resultDiv.querySelector('.annual-roi').textContent = annualRoiPercentage;
+                    }
+                });
+            }
+        }
+
+        // Update statistics if elements exist
+        const totalPropertiesElement = document.querySelector('.total-properties');
+        const dailyRevenueElement = document.querySelector('.daily-revenue');
+        const monthlyRevenueElement = document.querySelector('.monthly-revenue');
+        const annualRevenueElement = document.querySelector('.annual-revenue');
+
+        if (totalPropertiesElement && dailyRevenueElement && monthlyRevenueElement && annualRevenueElement) {
+            const totalProperties = properties.length;
+            const dailyRevenue = properties.reduce((sum, prop) => sum + (prop.costPerDay || 0), 0);
+            const monthlyRevenue = dailyRevenue * 30;
+            const annualRevenue = dailyRevenue * 365;
+            
+            totalPropertiesElement.textContent = totalProperties;
+            dailyRevenueElement.textContent = dailyRevenue.toLocaleString();
+            monthlyRevenueElement.textContent = monthlyRevenue.toLocaleString();
+            annualRevenueElement.textContent = annualRevenue.toLocaleString();
+        }
+
         function displayPage(page) {
             const start = (page - 1) * itemsPerPage;
             const end = Math.min(start + itemsPerPage, properties.length);
