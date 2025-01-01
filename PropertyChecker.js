@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -22,6 +22,46 @@
             expired: 'rgba(255, 0, 0, 0.1)',
             warning: 'rgba(255, 165, 0, 0.1)',
             hover: 'rgba(255, 255, 255, 0.1)'
+        },
+        stats: {
+            section: 'margin-top: 15px; text-align: center;',
+            toggleButton: 'background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;',
+            content: 'margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; text-align: left;',
+            flexContainer: `
+                display: flex; 
+                gap: 20px;
+                @media (max-width: 768px) {
+                    flex-direction: column;
+                }
+            `.replace(/\s+/g, ' ').trim(),
+            column: 'flex: 1;',
+            divider: `
+                width: 1px; 
+                background: #444;
+                @media (max-width: 768px) {
+                    width: 100%;
+                    height: 1px;
+                    margin: 10px 0;
+                }
+            `.replace(/\s+/g, ' ').trim(),
+            heading: 'color: #fff; margin: 0 0 15px 0;',
+            subheading: 'color: #888; font-size: 0.8em; margin: -10px 0 15px 0;',
+            grid: 'display: grid; gap: 10px;',
+            card: 'background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;',
+            cardLabel: 'font-size: 0.9em; color: #888; margin-bottom: 5px;',
+            cardValue: 'font-size: 1.2em; color: #fff; font-weight: 500;',
+            input: {
+                container: 'display: flex;',
+                field: 'flex: 1; padding: 8px; background: #444; color: #fff; border: 1px solid #666; border-radius: 4px; font-size: 1.1em;',
+                fieldLeft: 'border-radius: 4px 0 0 4px; border-right: none;',
+                fieldFull: 'width: calc(100% - 18px);',
+                button: 'background: #444; color: #fff; border: 1px solid #666; border-radius: 0 4px 4px 0; padding: 8px 12px; text-decoration: none; display: flex; align-items: center;'
+            },
+            calculateButton: 'background: #444; color: #fff; border: 1px solid #666; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; font-size: 1.1em; transition: background 0.2s;',
+            results: {
+                container: 'display: none; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;',
+                grid: 'display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr);'
+            }
         }
     };
 
@@ -255,10 +295,11 @@
                     <table style="width: 100%; border-collapse: collapse; color: #fff;">
                         <thead>
                             <tr>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property ID</th>
+                                <th style="display: none;">Property ID</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
+                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Daily Rent</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
                             </tr>
                         </thead>
@@ -397,97 +438,55 @@
         
         // Add statistics section after pagination
         const statsSection = document.querySelector('.stats-section') || createElement(`
-            <div class="stats-section" style="margin-top: 15px; text-align: center;">
-                <button class="stats-toggle" style="background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">
+            <div class="stats-section" style="${STYLES.stats.section}">
+                <style>
+                    @media (max-width: 768px) {
+                        .stats-flex-container {
+                            flex-direction: column !important;
+                        }
+                        .stats-divider {
+                            width: 100% !important;
+                            height: 1px !important;
+                            margin: 10px 0 !important;
+                        }
+                    }
+                </style>
+                <button class="stats-toggle" style="${STYLES.stats.toggleButton}">
                     Show Statistics ▼
                 </button>
-                <div class="stats-content" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; text-align: left;">
-                    <div style="display: flex; gap: 20px;">
+                <div class="stats-content" style="display: none; ${STYLES.stats.content}">
+                    <div class="stats-flex-container" style="${STYLES.stats.flexContainer}">
                         <!-- Revenue Stats Section -->
-                        <div style="flex: 1;">
-                            <h3 style="color: #fff; margin: 0 0 15px 0;">Revenue Stats</h3>
-                            <div style="color: #888; font-size: 0.8em; margin: -10px 0 15px 0;">(Based on current daily rental rates)</div>
-                            <div style="display: grid; gap: 10px;">
-                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
-                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">🏘️ Total Properties</div>
-                                    <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
-                                        <span class="total-properties">0</span>
-                                    </div>
-                                </div>
-                                
-                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
-                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">💰 Daily Revenue</div>
-                                    <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
-                                        $<span class="daily-revenue">0</span>
-                                    </div>
-                                </div>
-                                
-                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
-                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📅 Monthly Revenue</div>
-                                    <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
-                                        $<span class="monthly-revenue">0</span>
-                                    </div>
-                                </div>
-                                
-                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
-                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📈 Annual Revenue</div>
-                                    <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
-                                        $<span class="annual-revenue">0</span>
-                                    </div>
-                                </div>
+                        <div style="${STYLES.stats.column}">
+                            <h3 style="${STYLES.stats.heading}">Revenue Stats</h3>
+                            <div style="${STYLES.stats.subheading}">(Based on current daily rental rates)</div>
+                            <div style="${STYLES.stats.grid}">
+                                ${createStatsCard('🏘️ Total Properties', 'total-properties')}
+                                ${createStatsCard('💰 Daily Revenue', 'daily-revenue', '$')}
+                                ${createStatsCard('📅 Monthly Revenue', 'monthly-revenue', '$')}
+                                ${createStatsCard('📈 Annual Revenue', 'annual-revenue', '$')}
                             </div>
                         </div>
 
-                        <!-- Vertical Divider -->
-                        <div style="width: 1px; background: #444;"></div>
+                        <div class="stats-divider" style="${STYLES.stats.divider}"></div>
 
                         <!-- ROI Calculator Section -->
-                        <div style="flex: 1;">
-                            <h3 style="color: #fff; margin: 0 0 10px 0;">ROI Calculator</h3>
-                            <div style="display: grid; gap: 10px;">
-                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
-                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">💵 Property Cost ($)</div>
-                                    <div style="display: flex;">
-                                        <input type="number" class="pi-cost" style="flex: 1; padding: 8px; background: #444; color: #fff; border: 1px solid #666; border-radius: 4px 0 0 4px; border-right: none; font-size: 1.1em;" placeholder="Enter property cost">
-                                        <a href="https://www.torn.com/properties.php?step=sellingmarket#/property=13" target="_blank" style="background: #444; color: #fff; border: 1px solid #666; border-radius: 0 4px 4px 0; padding: 8px 12px; text-decoration: none; display: flex; align-items: center;">🔍</a>
-                                    </div>
-                                </div>
-
-                                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
-                                    <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">💰 Daily Rent ($)</div>
-                                    <input type="number" class="daily-rent" style="width: calc(100% - 18px); padding: 8px; background: #444; color: #fff; border: 1px solid #666; border-radius: 4px; font-size: 1.1em;" placeholder="Enter daily rent" value="${Math.max(...properties.map(prop => prop.costPerDay || 0))}">
-                                </div>
-
-                                <button class="calculate-roi" style="background: #444; color: #fff; border: 1px solid #666; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; font-size: 1.1em; transition: background 0.2s;">
+                        <div style="${STYLES.stats.column}">
+                            <h3 style="${STYLES.stats.heading}">ROI Calculator</h3>
+                            <div style="${STYLES.stats.grid}">
+                                ${createInputCard('Property Cost ($)', 'pi-cost', true)}
+                                ${createInputCard('Daily Rent ($)', 'daily-rent', false, Math.max(...properties.map(prop => prop.costPerDay || 0)))}
+                                
+                                <button class="calculate-roi" style="${STYLES.stats.calculateButton}">
                                     Calculate ROI 📊
                                 </button>
 
-                                <div class="roi-result" style="display: none; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
-                                    <div style="display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr);">
-                                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
-                                            <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">⏱️ Days to ROI</div>
-                                            <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
-                                                <span class="days-to-roi">-</span>
-                                            </div>
-                                        </div>
-                                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
-                                            <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📅 Months to ROI</div>
-                                            <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
-                                                <span class="months-to-roi">-</span>
-                                            </div>
-                                        </div>
-                                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
-                                            <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📆 Years to ROI</div>
-                                            <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
-                                                <span class="years-to-roi">-</span>
-                                            </div>
-                                        </div>
-                                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; transition: background 0.2s;">
-                                            <div style="font-size: 0.9em; color: #888; margin-bottom: 5px;">📈 Annual ROI</div>
-                                            <div style="font-size: 1.2em; color: #fff; font-weight: 500;">
-                                                <span class="annual-roi">-</span>%
-                                            </div>
-                                        </div>
+                                <div class="roi-result" style="${STYLES.stats.results.container}">
+                                    <div style="${STYLES.stats.results.grid}">
+                                        ${createStatsCard('⏱️ Days to ROI', 'days-to-roi')}
+                                        ${createStatsCard('📅 Months to ROI', 'months-to-roi')}
+                                        ${createStatsCard('📆 Years to ROI', 'years-to-roi')}
+                                        ${createStatsCard('📈 Annual ROI', 'annual-roi', '', '%')}
                                     </div>
                                 </div>
                             </div>
@@ -565,14 +564,14 @@
             
             tbody.innerHTML = ''; // Clear existing rows
             
-            pageProperties.forEach(prop => {
+            pageProperties.forEach((prop, index) => {
                 const row = document.createElement('tr');
                 const displayStatus = prop.offerMade ? 'Offered' : prop.status;
                 const baseColor = getPropertyRowColor(prop);
                 
                 row.style.cssText = `transition: background-color 0.2s ease; cursor: pointer; background-color: ${baseColor};`;
                 
-                // Simplified hover handlers
+                // Add hover handlers
                 row.addEventListener('mouseenter', () => {
                     row.style.backgroundColor = STYLES.statusColors.hover;
                 });
@@ -582,10 +581,11 @@
                 });
 
                 row.innerHTML = `
-                    <td style="${STYLES.tableCell}">${prop.propertyId}</td>
+                    <td style="display: none;">${prop.propertyId}</td>
                     <td style="${STYLES.tableCell}">${prop.name}</td>
                     <td style="${STYLES.tableCell}">${displayStatus}</td>
                     <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
+                    <td style="${STYLES.tableCell}">$${prop.costPerDay.toLocaleString()}</td>
                     <td style="${STYLES.tableCell}">
                         <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">${prop.buttonValue}</a>
                     </td>
@@ -701,4 +701,37 @@
 
     // Listen for URL changes (for single-page app navigation)
     window.addEventListener('hashchange', observeOfferSubmissions);
+
+    function createStatsCard(label, className, prefix = '', suffix = '') {
+        return `
+            <div style="${STYLES.stats.card}">
+                <div style="${STYLES.stats.cardLabel}">${label}</div>
+                <div style="${STYLES.stats.cardValue}">
+                    ${prefix}<span class="${className}">-</span>${suffix}
+                </div>
+            </div>
+        `;
+    }
+
+    function createInputCard(label, className, hasSearchButton = false, defaultValue = '') {
+        const inputStyle = hasSearchButton ? STYLES.stats.input.fieldLeft : STYLES.stats.input.fieldFull;
+        const valueAttr = defaultValue ? `value="${defaultValue}"` : '';
+        
+        return `
+            <div style="${STYLES.stats.card}">
+                <div style="${STYLES.stats.cardLabel}">${label}</div>
+                <div style="${STYLES.stats.input.container}">
+                    <input type="number" class="${className}" 
+                        style="${STYLES.stats.input.field} ${inputStyle}"
+                        placeholder="Enter ${label.toLowerCase()}"
+                        ${valueAttr}>
+                    ${hasSearchButton ? `
+                        <a href="https://www.torn.com/properties.php?step=sellingmarket#/property=13" 
+                           target="_blank" 
+                           style="${STYLES.stats.input.button}">🔍</a>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
 })();
