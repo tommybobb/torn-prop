@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      1.5
-// @description  Inserts a properties table on Torn's properties page
+// @version      1.6
+// @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
 // @grant        none
