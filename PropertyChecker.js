@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -179,23 +179,39 @@
 
     // Optimize observers with weak references
     function setupNavigationObserver() {
-        const observer = new MutationObserver(
+        // Create a more specific observer for the properties content
+        const contentObserver = new MutationObserver(
             debounce((mutations) => {
-                for (const mutation of mutations) {
-                    if (mutation.type === 'childList' && 
-                        mutation.target.id === 'properties-page-wrap') {
-                        createPropertiesTable();
-                        getCurrentPropertyId();
-                        observeOfferSubmissions();
-                        break;
-                    }
+                const propertiesContainer = document.querySelector('.properties-container');
+                const propertiesPageWrap = document.querySelector('#properties-page-wrap');
+                
+                // If our container is gone but we're still on the properties page, recreate it
+                if (!propertiesContainer && propertiesPageWrap) {
+                    createPropertiesTable();
+                    getCurrentPropertyId();
+                    observeOfferSubmissions();
                 }
             }, 100)
         );
 
-        observer.observe(document.body, {
+        // Start observing the body for React navigation changes
+        contentObserver.observe(document.body, {
             childList: true,
             subtree: true
+        });
+
+        // Also watch for URL hash changes which might indicate React navigation
+        window.addEventListener('hashchange', () => {
+            setTimeout(() => {
+                const propertiesContainer = document.querySelector('.properties-container');
+                const propertiesPageWrap = document.querySelector('#properties-page-wrap');
+                
+                if (!propertiesContainer && propertiesPageWrap) {
+                    createPropertiesTable();
+                    getCurrentPropertyId();
+                    observeOfferSubmissions();
+                }
+            }, 100); // Small delay to let React render
         });
     }
 
@@ -236,10 +252,9 @@
     }
 
     function createPropertiesTable() {
-        // Check if container already exists
-        if (document.querySelector('.properties-container')) {
-            return;
-        }
+        // Remove any existing containers that might be stale
+        const existingContainers = document.querySelectorAll('.properties-container');
+        existingContainers.forEach(container => container.remove());
 
         // Check for API key first
         const apiKey = localStorage.getItem('tornApiKey');
@@ -474,7 +489,7 @@
                         <div style="${STYLES.stats.column}">
                             <h3 style="${STYLES.stats.heading}">ROI Calculator</h3>
                             <div style="${STYLES.stats.grid}">
-                                ${createInputCard('Property Cost ($)', 'pi-cost', true)}
+                                ${createInputCard('Property Cost ($) - Default value not up to date', 'pi-cost', true, 1667000000)}
                                 ${createInputCard('Daily Rent ($)', 'daily-rent', false, Math.max(...properties.map(prop => prop.costPerDay || 0)))}
                                 
                                 <button class="calculate-roi" style="${STYLES.stats.calculateButton}">
