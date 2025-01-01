@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Inserts a properties table on Torn's properties page
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
