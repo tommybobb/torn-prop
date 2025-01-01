@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.0
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -72,11 +72,24 @@
         const apiKey = localStorage.getItem('tornApiKey');
         const targetElement = document.querySelector('#properties-page-wrap');
         
-        // Wait for target element to exist
+        // Wait for target element to exist with a maximum number of retries
         if (!targetElement) {
-            setTimeout(createPropertiesTable, 100); // Retry after 100ms
+            if (!window.propertiesRetryCount) {
+                window.propertiesRetryCount = 0;
+            }
+            
+            if (window.propertiesRetryCount < 30) { // Try for up to 3 seconds (30 * 100ms)
+                window.propertiesRetryCount++;
+                setTimeout(createPropertiesTable, 100);
+            } else {
+                console.error('Properties Manager: Failed to find #properties-page-wrap after 30 attempts');
+                window.propertiesRetryCount = 0;
+            }
             return;
         }
+        
+        // Reset retry count on success
+        window.propertiesRetryCount = 0;
 
         if (!apiKey && targetElement) {
             targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm());
@@ -384,15 +397,45 @@
             .catch(handleApiError);
     }
 
-    // Wait for page load and insert table
+    // Add this function to handle React navigation
+    function setupNavigationObserver() {
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type === 'childList' && 
+                    mutation.target.id === 'properties-page-wrap') {
+                    // React has updated the properties page
+                    createPropertiesTable();
+                    getCurrentPropertyId();
+                    observeOfferSubmissions();
+                }
+            }
+        });
+
+        // Start observing the body for the properties-page-wrap element
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    // Modify the load event listener to include the navigation observer
     window.addEventListener('load', function() {
-        // Wait for the properties page wrap to be ready
+        let attempts = 0;
+        const maxAttempts = 30; // 3 seconds maximum wait time
+        
         const checkForElement = setInterval(() => {
-            if (document.querySelector('#properties-page-wrap')) {
+            attempts++;
+            const targetElement = document.querySelector('#properties-page-wrap');
+            
+            if (targetElement) {
                 clearInterval(checkForElement);
                 createPropertiesTable();
                 getCurrentPropertyId();
                 observeOfferSubmissions();
+                setupNavigationObserver(); // Add the navigation observer
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkForElement);
+                console.error('Properties Manager: Failed to initialize after 3 seconds');
             }
         }, 100);
     });
