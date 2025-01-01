@@ -60,6 +60,11 @@
     }
 
     function createPropertiesTable() {
+        // Check if container already exists
+        if (document.querySelector('.properties-container')) {
+            return;
+        }
+
         // Check for API key first
         const apiKey = localStorage.getItem('tornApiKey');
         if (!apiKey) {
@@ -99,6 +104,7 @@
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
+                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Cost Per Day</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
                             </tr>
                         </thead>
@@ -209,6 +215,7 @@
                         daysLeft: prop.rented ? prop.rented.days_left : 0,
                         renew: prop.rented ?`https://www.torn.com/properties.php#/p=options&ID=${id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=lease`,
                         offerMade: localStorage.getItem(`property_offer_${id}`) || null,
+                        costPerDay: prop.rented ? prop.rented.cost_per_day : 0,
                         buttonValue: prop.rented ? "Renew" : "Lease"
                     }))
                     .sort((a, b) => a.daysLeft - b.daysLeft);
@@ -263,6 +270,7 @@
                     <td style="${STYLES.tableCell}">${prop.name}</td>
                     <td style="${STYLES.tableCell}">${displayStatus}</td>
                     <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
+                    <td style="${STYLES.tableCell}">$${prop.costPerDay.toLocaleString()}</td>
                     <td style="${STYLES.tableCell}">
                         <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">${prop.buttonValue}</a>
                     </td>
