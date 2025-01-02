@@ -589,9 +589,18 @@
 
         // Add filter functionality
         const hideAvailable = document.getElementById('hide-available');
+        const hideAvailableLabel = hideAvailable.parentElement;
         
-        // Set initial checkbox state from localStorage
-        hideAvailable.checked = localStorage.getItem('hideAvailableProperties') === 'true';
+        // Calculate available properties count
+        const availableCount = properties.filter(prop => prop.status === "Available").length;
+        hideAvailableLabel.innerHTML = `
+            <input type="checkbox" id="hide-available" style="cursor: pointer;">
+            Hide Available (${availableCount})
+        `;
+        
+        // Restore checkbox state after updating label
+        const newCheckbox = document.getElementById('hide-available');
+        newCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
         
         function getFilteredProperties() {
             const searchId = document.getElementById('player-id-search')?.value.trim();
