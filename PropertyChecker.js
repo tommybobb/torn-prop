@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      2.8
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -305,15 +305,15 @@
                     </div>
                 </div>
                 <div class="properties-content" style="display: none;">
-                    <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex: 0 1 auto; max-width: 400px; width: 100%;">
                             <input type="text" 
                                    id="player-id-search" 
                                    placeholder="Search by Player ID" 
-                                   style="padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;">
+                                   style="padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px; width: calc(100% - 70px);">
                             <button id="clear-search" style="${STYLES.button}">Clear</button>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex: 0 1 auto; margin-left: auto;">
                             <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
                                 <input type="checkbox" id="hide-available" style="cursor: pointer;">
                                 Hide Available
