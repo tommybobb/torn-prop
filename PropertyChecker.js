@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -579,6 +579,9 @@
         // Add filter functionality
         const hideAvailable = document.getElementById('hide-available');
         
+        // Set initial checkbox state from localStorage
+        hideAvailable.checked = localStorage.getItem('hideAvailableProperties') === 'true';
+        
         function getFilteredProperties() {
             return hideAvailable.checked 
                 ? properties.filter(prop => prop.status !== "Available")
@@ -649,8 +652,9 @@
         // Display first page
         displayPage(1);
 
-        // Add checkbox change handler
+        // Add checkbox change handler with localStorage
         hideAvailable.addEventListener('change', () => {
+            localStorage.setItem('hideAvailableProperties', hideAvailable.checked);
             currentPage = 1; // Reset to first page when filter changes
             displayPage(currentPage);
         });
