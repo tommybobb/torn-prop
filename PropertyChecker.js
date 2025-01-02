@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.6
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -138,7 +138,8 @@
                 renew: `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=${prop.rented ? 'offerExtension' : 'lease'}`,
                 offerMade: localStorage.getItem(`property_offer_${id}`) || null,
                 costPerDay: prop.rented ? prop.rented.cost_per_day : 0,
-                buttonValue: prop.rented ? "Renew" : "Lease"
+                buttonValue: prop.rented ? "Renew" : "Lease",
+                rentedBy: prop.rented ? prop.rented.user_id : null
             }))
             .sort((a, b) => a.daysLeft - b.daysLeft);
     }
@@ -304,12 +305,21 @@
                     </div>
                 </div>
                 <div class="properties-content" style="display: none;">
-                    <div style="margin-bottom: 15px; display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
-                        <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
-                            <input type="checkbox" id="hide-available" style="cursor: pointer;">
-                            Hide Available
-                        </label>
-                        <button id="refresh-properties" style="${STYLES.button}">Refresh</button>
+                    <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="text" 
+                                   id="player-id-search" 
+                                   placeholder="Search by Player ID" 
+                                   style="padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;">
+                            <button id="clear-search" style="${STYLES.button}">Clear</button>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
+                                <input type="checkbox" id="hide-available" style="cursor: pointer;">
+                                Hide Available
+                            </label>
+                            <button id="refresh-properties" style="${STYLES.button}">Refresh</button>
+                        </div>
                     </div>
                     <table style="width: 100%; border-collapse: collapse; color: #fff;">
                         <thead>
@@ -429,7 +439,8 @@
                         renew: prop.rented ?`https://www.torn.com/properties.php#/p=options&ID=${id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=lease`,
                         offerMade: localStorage.getItem(`property_offer_${id}`) || null,
                         costPerDay: prop.rented ? prop.rented.cost_per_day : 0,
-                        buttonValue: prop.rented ? "Renew" : "Lease"
+                        buttonValue: prop.rented ? "Renew" : "Lease",
+                        rentedBy: prop.rented ? prop.rented.user_id : null
                     }))
                     .sort((a, b) => a.daysLeft - b.daysLeft);
                 
@@ -583,9 +594,18 @@
         hideAvailable.checked = localStorage.getItem('hideAvailableProperties') === 'true';
         
         function getFilteredProperties() {
-            return hideAvailable.checked 
+            const searchId = document.getElementById('player-id-search')?.value.trim();
+            let filtered = hideAvailable.checked 
                 ? properties.filter(prop => prop.status !== "Available")
                 : properties;
+            
+            if (searchId) {
+                filtered = filtered.filter(prop => 
+                    prop.rentedBy && prop.rentedBy.toString() === searchId
+                );
+            }
+            
+            return filtered;
         }
         
         function displayPage(page) {
@@ -658,6 +678,23 @@
             currentPage = 1; // Reset to first page when filter changes
             displayPage(currentPage);
         });
+
+        // Add search functionality
+        const searchInput = document.getElementById('player-id-search');
+        const clearButton = document.getElementById('clear-search');
+        
+        if (searchInput && clearButton) {
+            searchInput.addEventListener('input', () => {
+                currentPage = 1; // Reset to first page when searching
+                displayPage(currentPage);
+            });
+
+            clearButton.addEventListener('click', () => {
+                searchInput.value = '';
+                currentPage = 1;
+                displayPage(currentPage);
+            });
+        }
     }
 
     // Add new function to observe offer submissions
