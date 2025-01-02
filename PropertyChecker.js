@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.6
+// @version      2.7
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -602,9 +602,16 @@
         const newCheckbox = document.getElementById('hide-available');
         newCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
         
+        // Reattach the event listener to the new checkbox
+        newCheckbox.addEventListener('change', () => {
+            localStorage.setItem('hideAvailableProperties', newCheckbox.checked);
+            currentPage = 1; // Reset to first page when filter changes
+            displayPage(currentPage);
+        });
+
         function getFilteredProperties() {
             const searchId = document.getElementById('player-id-search')?.value.trim();
-            let filtered = hideAvailable.checked 
+            let filtered = newCheckbox.checked  // Use newCheckbox instead of hideAvailable
                 ? properties.filter(prop => prop.status !== "Available")
                 : properties;
             
@@ -680,13 +687,6 @@
         
         // Display first page
         displayPage(1);
-
-        // Add checkbox change handler with localStorage
-        hideAvailable.addEventListener('change', () => {
-            localStorage.setItem('hideAvailableProperties', hideAvailable.checked);
-            currentPage = 1; // Reset to first page when filter changes
-            displayPage(currentPage);
-        });
 
         // Add search functionality
         const searchInput = document.getElementById('player-id-search');
