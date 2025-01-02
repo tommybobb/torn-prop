@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.4
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -304,7 +304,11 @@
                     </div>
                 </div>
                 <div class="properties-content" style="display: none;">
-                    <div style="margin-bottom: 15px; text-align: right;">
+                    <div style="margin-bottom: 15px; display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+                        <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
+                            <input type="checkbox" id="hide-available" style="cursor: pointer;">
+                            Hide Available
+                        </label>
                         <button id="refresh-properties" style="${STYLES.button}">Refresh</button>
                     </div>
                     <table style="width: 100%; border-collapse: collapse; color: #fff;">
@@ -572,10 +576,21 @@
             annualRevenueElement.textContent = annualRevenue.toLocaleString();
         }
 
+        // Add filter functionality
+        const hideAvailable = document.getElementById('hide-available');
+        
+        function getFilteredProperties() {
+            return hideAvailable.checked 
+                ? properties.filter(prop => prop.status !== "Available")
+                : properties;
+        }
+        
         function displayPage(page) {
+            const filteredProperties = getFilteredProperties();
+            const totalPages = Math.ceil(filteredProperties.length / itemsPerPage);
             const start = (page - 1) * itemsPerPage;
-            const end = Math.min(start + itemsPerPage, properties.length);
-            const pageProperties = properties.slice(start, end);
+            const end = Math.min(start + itemsPerPage, filteredProperties.length);
+            const pageProperties = filteredProperties.slice(start, end);
             
             tbody.innerHTML = ''; // Clear existing rows
             
@@ -608,8 +623,8 @@
                 tbody.appendChild(row);
             });
             
-            // Update page info with row count
-            pageInfo.textContent = `Showing ${start + 1}-${end} of ${properties.length} (Page ${page} of ${totalPages})`;
+            // Update page info with filtered count
+            pageInfo.textContent = `Showing ${start + 1}-${end} of ${filteredProperties.length} (Page ${page} of ${totalPages})`;
             prevButton.disabled = page === 1;
             nextButton.disabled = page === totalPages;
             prevButton.style.opacity = page === 1 ? '0.5' : '1';
@@ -633,6 +648,12 @@
         
         // Display first page
         displayPage(1);
+
+        // Add checkbox change handler
+        hideAvailable.addEventListener('change', () => {
+            currentPage = 1; // Reset to first page when filter changes
+            displayPage(currentPage);
+        });
     }
 
     // Add new function to observe offer submissions
