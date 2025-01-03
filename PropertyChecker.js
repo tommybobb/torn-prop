@@ -136,7 +136,7 @@
                 status: prop.rented ? "Rented" : "Available",
                 daysLeft: prop.rented ? prop.rented.days_left : 0,
                 renew: `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=${prop.rented ? 'offerExtension' : 'lease'}`,
-                offerMade: localStorage.getItem(`property_offer_${id}`) || null,
+                offerMade: localStorage.getItem(`property_offer_${id}`) !== null,
                 costPerDay: prop.rented ? prop.rented.cost_per_day : 0,
                 buttonValue: prop.rented ? "Renew" : "Lease",
                 rentedBy: prop.rented ? prop.rented.user_id : null
@@ -315,6 +315,10 @@
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px; flex: 0 1 auto; margin-left: auto;">
                             <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
+                                <input type="checkbox" id="hide-offered" style="cursor: pointer;">
+                                Hide Offered
+                            </label>
+                            <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
                                 <input type="checkbox" id="hide-available" style="cursor: pointer;">
                                 Hide Available
                             </label>
@@ -416,16 +420,16 @@
                 }
                 
                 // Check and clean up localStorage before processing properties
-                Object.entries(data.properties).forEach(([id, prop]) => {
-                    const storedDaysLeft = localStorage.getItem(`property_offer_${id}`);
-                    if (storedDaysLeft && (
-                        (prop.rented && prop.rented.days_left > parseInt(storedDaysLeft)) || // Renewal successful
-                        (prop.rented && prop.rented.days_left === 0) || // Rental expired
-                        (!prop.rented) // Property no longer rented
-                    )) {
-                        localStorage.removeItem(`property_offer_${id}`);
-                    }
-                });
+                if (data.properties) {
+                    Object.entries(data.properties).forEach(([id, prop]) => {
+                        const storedOffer = localStorage.getItem(`property_offer_${id}`);
+                        if (storedOffer && prop.rented && 
+                            (prop.rented.days_left > parseInt(storedOffer) || // Renewal successful
+                             prop.rented.days_left === 0)) { // Rental expired
+                            localStorage.removeItem(`property_offer_${id}`);
+                        }
+                    });
+                }
                 
                 const properties = Object.entries(data.properties)
                     .filter(([id, prop]) => 
@@ -438,7 +442,7 @@
                         status: prop.rented ? "Rented" : "Available",
                         daysLeft: prop.rented ? prop.rented.days_left : 0,
                         renew: prop.rented ?`https://www.torn.com/properties.php#/p=options&ID=${id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=lease`,
-                        offerMade: localStorage.getItem(`property_offer_${id}`) || null,
+                        offerMade: localStorage.getItem(`property_offer_${id}`) !== null,
                         costPerDay: prop.rented ? prop.rented.cost_per_day : 0,
                         buttonValue: prop.rented ? "Renew" : "Lease",
                         rentedBy: prop.rented ? prop.rented.user_id : null
@@ -588,33 +592,102 @@
             annualRevenueElement.textContent = annualRevenue.toLocaleString();
         }
 
+        // Function to update filter labels with counts
+        function updateFilterLabels(properties) {
+            const availableCount = properties.filter(prop => prop.status === "Available").length;
+            const offeredCount = properties.filter(prop => prop.offerMade).length;
+            
+            const hideAvailableLabel = document.getElementById('hide-available').parentElement;
+            const hideOfferedLabel = document.getElementById('hide-offered').parentElement;
+            
+            hideAvailableLabel.innerHTML = `
+                <input type="checkbox" id="hide-available" style="cursor: pointer;">
+                Hide Available (${availableCount})
+            `;
+            hideOfferedLabel.innerHTML = `
+                <input type="checkbox" id="hide-offered" style="cursor: pointer;">
+                Hide Offered (${offeredCount})
+            `;
+            
+            // Restore checkbox states
+            const newAvailableCheckbox = document.getElementById('hide-available');
+            const newOfferedCheckbox = document.getElementById('hide-offered');
+            
+            newAvailableCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
+            newOfferedCheckbox.checked = localStorage.getItem('hideOfferedProperties') === 'true';
+            
+            // Re-attach event listeners
+            newAvailableCheckbox.addEventListener('change', () => {
+                localStorage.setItem('hideAvailableProperties', newAvailableCheckbox.checked);
+                currentPage = 1;
+                displayPage(currentPage);
+            });
+            
+            newOfferedCheckbox.addEventListener('change', () => {
+                localStorage.setItem('hideOfferedProperties', newOfferedCheckbox.checked);
+                currentPage = 1;
+                displayPage(currentPage);
+            });
+        }
+
         // Add filter functionality
         const hideAvailable = document.getElementById('hide-available');
+        const hideOffered = document.getElementById('hide-offered');
         const hideAvailableLabel = hideAvailable.parentElement;
+        const hideOfferedLabel = hideOffered.parentElement;
         
-        // Calculate available properties count
+        // Calculate counts
         const availableCount = properties.filter(prop => prop.status === "Available").length;
+        const offeredCount = properties.filter(prop => prop.offerMade).length;
+        
+        // Update labels with counts
         hideAvailableLabel.innerHTML = `
             <input type="checkbox" id="hide-available" style="cursor: pointer;">
             Hide Available (${availableCount})
         `;
+        hideOfferedLabel.innerHTML = `
+            <input type="checkbox" id="hide-offered" style="cursor: pointer;">
+            Hide Offered (${offeredCount})
+        `;
         
-        // Restore checkbox state after updating label
-        const newCheckbox = document.getElementById('hide-available');
-        newCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
+        // Restore checkbox states
+        const newAvailableCheckbox = document.getElementById('hide-available');
+        const newOfferedCheckbox = document.getElementById('hide-offered');
+        newAvailableCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
+        newOfferedCheckbox.checked = localStorage.getItem('hideOfferedProperties') === 'true';
         
-        // Reattach the event listener to the new checkbox
-        newCheckbox.addEventListener('change', () => {
-            localStorage.setItem('hideAvailableProperties', newCheckbox.checked);
-            currentPage = 1; // Reset to first page when filter changes
+        // Attach event listeners
+        newAvailableCheckbox.addEventListener('change', () => {
+            localStorage.setItem('hideAvailableProperties', newAvailableCheckbox.checked);
+            currentPage = 1;
+            displayPage(currentPage);
+        });
+        
+        newOfferedCheckbox.addEventListener('change', () => {
+            localStorage.setItem('hideOfferedProperties', newOfferedCheckbox.checked);
+            currentPage = 1;
             displayPage(currentPage);
         });
 
         function getFilteredProperties() {
             const searchId = document.getElementById('player-id-search')?.value.trim();
-            let filtered = newCheckbox.checked  // Use newCheckbox instead of hideAvailable
-                ? properties.filter(prop => prop.status !== "Available")
-                : properties;
+            let filtered = [...properties]; // Create a copy of the properties array
+            
+            // Get current checkbox states directly from the elements
+            const hideAvailable = document.getElementById('hide-available')?.checked;
+            const hideOffered = document.getElementById('hide-offered')?.checked;
+            
+            if (hideAvailable) {
+                filtered = filtered.filter(prop => prop.status !== "Available");
+            }
+            
+            if (hideOffered) {
+                // Explicitly check the localStorage for each property
+                filtered = filtered.filter(prop => {
+                    const hasOffer = localStorage.getItem(`property_offer_${prop.propertyId}`) !== null;
+                    return !hasOffer;
+                });
+            }
             
             if (searchId) {
                 filtered = filtered.filter(prop => 
@@ -675,48 +748,33 @@
                     const propertyId = logOfferBtn.dataset.propertyId;
                     const daysLeft = parseInt(logOfferBtn.dataset.daysLeft);
                     
-                    // Remove existing hover listeners
-                    const oldMouseEnter = row._mouseenterHandler;
-                    const oldMouseLeave = row._mouseleaveHandler;
-                    if (oldMouseEnter) row.removeEventListener('mouseenter', oldMouseEnter);
-                    if (oldMouseLeave) row.removeEventListener('mouseleave', oldMouseLeave);
-                    
                     if (logOfferBtn.textContent.trim() === '💸') {
                         // Store the offer in localStorage
                         localStorage.setItem(`property_offer_${propertyId}`, daysLeft);
                         
-                        // Apply the offered color directly from STYLES
-                        row.style.backgroundColor = STYLES.statusColors.offered;
+                        // Update the property in the current dataset
+                        const property = properties.find(p => p.propertyId === propertyId);
+                        if (property) {
+                            property.offerMade = true;
+                        }
                         
-                        // Update the button and status
-                        logOfferBtn.textContent = '❌';
-                        row.children[2].textContent = 'Offered';
-                        
-                        // Add new hover handlers for offered state
-                        row._mouseenterHandler = () => row.style.backgroundColor = STYLES.statusColors.hover;
-                        row._mouseleaveHandler = () => row.style.backgroundColor = STYLES.statusColors.offered;
+                        // Update filter labels and redisplay the page
+                        updateFilterLabels(properties);
+                        displayPage(currentPage);  // This will apply any active filters
                     } else {
                         // Remove the offer from localStorage
                         localStorage.removeItem(`property_offer_${propertyId}`);
                         
-                        // Reset the row color based on property status
-                        const baseColor = daysLeft === 0 ? STYLES.statusColors.expired :
-                                         daysLeft <= 10 ? STYLES.statusColors.warning :
-                                         '';
-                        row.style.backgroundColor = baseColor;
+                        // Update the property in the current dataset
+                        const property = properties.find(p => p.propertyId === propertyId);
+                        if (property) {
+                            property.offerMade = false;
+                        }
                         
-                        // Add new hover handlers with the correct base color
-                        row._mouseenterHandler = () => row.style.backgroundColor = STYLES.statusColors.hover;
-                        row._mouseleaveHandler = () => row.style.backgroundColor = baseColor;
-                        
-                        // Reset the button and status
-                        logOfferBtn.textContent = '💸';
-                        row.children[2].textContent = prop.status;
+                        // Update filter labels and redisplay the page
+                        updateFilterLabels(properties);
+                        displayPage(currentPage);  // This will apply any active filters
                     }
-                    
-                    // Add the new hover listeners
-                    row.addEventListener('mouseenter', row._mouseenterHandler);
-                    row.addEventListener('mouseleave', row._mouseleaveHandler);
                 });
             });
             
