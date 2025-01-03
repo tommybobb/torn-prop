@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.2
+// @version      3.3
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -359,14 +359,17 @@
         return '';
     }
 
-    function createApiKeyForm() {
+    function createApiKeyForm(isIncorrectKey = false) {
         return `
             <div class="properties-container" style="${STYLES.container}">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h2 style="color: #fff; margin: 0;">Properties Manager</h2>
                 </div>
                 <div style="text-align: center;">
-                    <p style="color: #fff; margin-bottom: 15px;">Please enter your Torn API key to continue:</p>
+                    ${isIncorrectKey ? 
+                        `<p style="color: #ff6666; margin-bottom: 15px;">Incorrect API Key detected. Please enter a new one:</p>` :
+                        `<p style="color: #fff; margin-bottom: 15px;">Please enter your Torn API key to continue:</p>`
+                    }
                     <input type="text" id="torn-api-key" style="padding: 5px; margin-right: 10px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;">
                     <button id="submit-api-key" style="${STYLES.button}">Submit</button>
                 </div>
@@ -518,10 +521,40 @@
      */
     function handleApiError(error) {
         console.error('Error fetching property data:', error);
-        const message = error.message.includes('API Error') 
-            ? error.message 
-            : 'Error fetching property data. Please check your API key and try again.';
-        alert(message);
+        
+        // Check if it's an incorrect API key error
+        if (error.message.includes('Incorrect key')) {
+            // Clear the invalid API key
+            localStorage.removeItem('tornApiKey');
+            
+            // Remove existing container if present
+            const existingContainer = document.querySelector('.properties-container');
+            if (existingContainer) {
+                existingContainer.remove();
+            }
+            
+            // Show the API key form
+            const targetElement = document.querySelector('#properties-page-wrap');
+            if (targetElement) {
+                targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm(true));
+                
+                // Add API key submission handler
+                document.getElementById('submit-api-key').addEventListener('click', function() {
+                    const apiKeyInput = document.getElementById('torn-api-key');
+                    if (apiKeyInput.value) {
+                        localStorage.setItem('tornApiKey', apiKeyInput.value);
+                        document.querySelector('.properties-container').remove();
+                        createPropertiesTable();
+                    }
+                });
+            }
+        } else {
+            // Handle other errors with alert
+            const message = error.message.includes('API Error') 
+                ? error.message 
+                : 'Error fetching property data. Please check your API key and try again.';
+            alert(message);
+        }
     }
 
     function getPropertyData() {
@@ -1203,7 +1236,7 @@
             <div style="${STYLES.stats.card}">
                 <div style="${STYLES.stats.cardLabel}">${label}</div>
                 <div style="${STYLES.stats.input.container}">
-                    <input type="number" class="${className}" 
+                    <input type="${className === 'api-key-input' ? 'text' : 'number'}" class="${className}" 
                         style="${STYLES.stats.input.field} ${inputStyle}"
                         placeholder="Enter ${label.toLowerCase()}"
                         ${valueAttr}>
