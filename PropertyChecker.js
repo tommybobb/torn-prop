@@ -673,7 +673,13 @@
                 logOfferBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     const propertyId = logOfferBtn.dataset.propertyId;
-                    const daysLeft = logOfferBtn.dataset.daysLeft;
+                    const daysLeft = parseInt(logOfferBtn.dataset.daysLeft);
+                    
+                    // Remove existing hover listeners
+                    const oldMouseEnter = row._mouseenterHandler;
+                    const oldMouseLeave = row._mouseleaveHandler;
+                    if (oldMouseEnter) row.removeEventListener('mouseenter', oldMouseEnter);
+                    if (oldMouseLeave) row.removeEventListener('mouseleave', oldMouseLeave);
                     
                     if (logOfferBtn.textContent.trim() === '💸') {
                         // Store the offer in localStorage
@@ -682,38 +688,35 @@
                         // Apply the offered color directly from STYLES
                         row.style.backgroundColor = STYLES.statusColors.offered;
                         
-                        // Update the row's hover handlers with the new base color
-                        row.addEventListener('mouseenter', () => {
-                            row.style.backgroundColor = STYLES.statusColors.hover;
-                        });
-                        
-                        row.addEventListener('mouseleave', () => {
-                            row.style.backgroundColor = STYLES.statusColors.offered;
-                        });
-                        
                         // Update the button and status
                         logOfferBtn.textContent = '❌';
                         row.children[2].textContent = 'Offered';
+                        
+                        // Add new hover handlers for offered state
+                        row._mouseenterHandler = () => row.style.backgroundColor = STYLES.statusColors.hover;
+                        row._mouseleaveHandler = () => row.style.backgroundColor = STYLES.statusColors.offered;
                     } else {
                         // Remove the offer from localStorage
                         localStorage.removeItem(`property_offer_${propertyId}`);
                         
-                        // Reset the row color
-                        row.style.backgroundColor = '';
+                        // Reset the row color based on property status
+                        const baseColor = daysLeft === 0 ? STYLES.statusColors.expired :
+                                         daysLeft <= 10 ? STYLES.statusColors.warning :
+                                         '';
+                        row.style.backgroundColor = baseColor;
                         
-                        // Reset hover handlers
-                        row.addEventListener('mouseenter', () => {
-                            row.style.backgroundColor = STYLES.statusColors.hover;
-                        });
-                        
-                        row.addEventListener('mouseleave', () => {
-                            row.style.backgroundColor = '';
-                        });
+                        // Add new hover handlers with the correct base color
+                        row._mouseenterHandler = () => row.style.backgroundColor = STYLES.statusColors.hover;
+                        row._mouseleaveHandler = () => row.style.backgroundColor = baseColor;
                         
                         // Reset the button and status
                         logOfferBtn.textContent = '💸';
                         row.children[2].textContent = prop.status;
                     }
+                    
+                    // Add the new hover listeners
+                    row.addEventListener('mouseenter', row._mouseenterHandler);
+                    row.addEventListener('mouseleave', row._mouseleaveHandler);
                 });
             });
             
