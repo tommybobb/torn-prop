@@ -62,7 +62,65 @@
                 container: 'display: none; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;',
                 grid: 'display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr);'
             }
-        }
+        },
+        mobileTable: `
+            @media screen and (max-width: 768px) {
+                table, thead, tbody, tr, th, td {
+                    display: block;
+                }
+                
+                thead tr {
+                    position: absolute;
+                    top: -9999px;
+                    left: -9999px;
+                }
+                
+                tr {
+                    margin-bottom: 15px;
+                    background: rgba(0,0,0,0.2);
+                    border-radius: 5px;
+                    padding: 10px;
+                }
+                
+                td {
+                    position: relative;
+                    padding-left: 50% !important;
+                    border-bottom: none !important;
+                }
+                
+                td:before {
+                    position: absolute;
+                    left: 8px;
+                    width: 45%;
+                    white-space: nowrap;
+                    font-weight: bold;
+                }
+                
+                /* Labels for each td */
+                td:nth-of-type(1):before { content: "Property Name:"; }
+                td:nth-of-type(2):before { content: "Status:"; }
+                td:nth-of-type(3):before { content: "Days Left:"; }
+                td:nth-of-type(4):before { content: "Daily Rent:"; }
+                td:nth-of-type(5):before { content: "Renew:"; }
+                td:nth-of-type(6):before { content: "Offer:"; }
+                
+                /* Adjust filter section */
+                .filter-section {
+                    flex-direction: column;
+                    gap: 10px;
+                }
+                
+                .filter-section > div {
+                    width: 100% !important;
+                    max-width: 100% !important;
+                }
+                
+                /* Adjust pagination */
+                .page-info-row {
+                    margin: 15px 0;
+                }
+            }
+        `
     };
 
     const CONFIG = {
@@ -297,6 +355,7 @@
         }
 
         const tableHTML = `
+            <style>${STYLES.mobileTable}</style>
             <div class="properties-container" style="${STYLES.container}">
                 <div class="properties-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h2 style="color: #fff; margin: 0; cursor: pointer;">Properties Manager</h2>
@@ -305,7 +364,7 @@
                     </div>
                 </div>
                 <div class="properties-content" style="display: none;">
-                    <div style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between;">
+                    <div class="filter-section" style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between;">
                         <div style="display: flex; align-items: center; gap: 10px; flex: 0 1 auto; max-width: 200px; width: 100%;">
                             <input type="text" 
                                    id="player-id-search" 
@@ -313,7 +372,7 @@
                                    style="padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px; width: calc(100% - 70px);">
                             <button id="clear-search" style="${STYLES.button}">Clear</button>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 10px; flex: 0 1 auto; margin-left: auto;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                             <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
                                 <input type="checkbox" id="hide-offered" style="cursor: pointer;">
                                 Hide Offered
@@ -325,21 +384,23 @@
                             <button id="refresh-properties" style="${STYLES.button}">Refresh</button>
                         </div>
                     </div>
-                    <table style="width: 100%; border-collapse: collapse; color: #fff;">
-                        <thead>
-                            <tr>
-                                <th style="display: none;">Property ID</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Daily Rent</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
-                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Offer</th>
-                            </tr>
-                        </thead>
-                        <tbody id="properties-table-body">
-                        </tbody>
-                    </table>
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; color: #fff;">
+                            <thead>
+                                <tr>
+                                    <th style="display: none;">Property ID</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Daily Rent</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Offer</th>
+                                </tr>
+                            </thead>
+                            <tbody id="properties-table-body">
+                            </tbody>
+                        </table>
+                    </div>
                     <div class="page-info-row" style="text-align: center; margin: 10px 0;">
                         <span id="page-info" style="color: #fff; display: inline-block; padding: 5px 10px; background: rgba(0,0,0,0.2); border-radius: 4px;">Page 1</span>
                     </div>
@@ -727,11 +788,12 @@
                     <style>
                         @media (hover: none) and (pointer: coarse) {
                             .log-offer-btn[title] {
-                                pointer-events: none;
+                                pointer-events: auto !important;
+                                -webkit-tap-highlight-color: transparent;
+                                touch-action: manipulation;
                             }
                         }
                     </style>
-                    <td style="display: none;">${prop.propertyId}</td>
                     <td style="${STYLES.tableCell}">${prop.name}</td>
                     <td style="${STYLES.tableCell}">${displayStatus}</td>
                     <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
@@ -742,7 +804,8 @@
                     <td style="${STYLES.tableCell}">
                         <button class="log-offer-btn" data-property-id="${prop.propertyId}" data-days-left="${prop.daysLeft}"
                             style="${STYLES.button}; position: relative;"
-                            title="${prop.offerMade ? 'Remove offer' : 'Log an offer'}">
+                            title="${prop.offerMade ? 'Remove offer' : 'Log an offer'}"
+                            ontouchstart="">
                             ${prop.offerMade ? '❌' : '💸'}
                         </button>
                     </td>
@@ -751,8 +814,17 @@
 
                 // Add click handler for Log Offer button
                 const logOfferBtn = row.querySelector('.log-offer-btn');
-                logOfferBtn.addEventListener('click', (e) => {
+                
+                // Handle button press
+                const handleButtonPress = (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
+                    
+                    if (e.type === 'touchstart') {
+                        // Prevent double-firing on mobile
+                        logOfferBtn.removeEventListener('click', handleButtonPress);
+                    }
+                    
                     const propertyId = logOfferBtn.dataset.propertyId;
                     const daysLeft = parseInt(logOfferBtn.dataset.daysLeft);
                     
@@ -775,6 +847,15 @@
                     // Update filter labels and redisplay the page
                     updateFilterLabels(properties);
                     displayPage(currentPage);
+                };
+
+                // Add event listeners
+                logOfferBtn.addEventListener('touchstart', handleButtonPress, { passive: false });
+                logOfferBtn.addEventListener('click', handleButtonPress);
+                
+                // Prevent ghost clicks
+                logOfferBtn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
                 });
             });
             
