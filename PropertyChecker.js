@@ -947,7 +947,7 @@
     // Add new function to observe offer submissions
     function observeOfferSubmissions() {
         const url = new URL(window.location.href);
-        if (url.hash.includes('tab=offerExtension')) {
+        if (url.hash.includes('tab=offerExtension') || url.hash.includes('tab=lease')) {
             const propertyId = url.hash.match(/ID=(\d+)/)?.[1];
             if (!propertyId) return;
 
@@ -955,13 +955,73 @@
 
             const observer = new MutationObserver((mutations, obs) => {
                 const nextButton = document.querySelector('input[type="submit"][value="NEXT"]');
+                const offerExtensionUl = document.querySelector('ul.offerExtension-input');
+                
+                if (offerExtensionUl) {
+                    const costLi = offerExtensionUl.querySelector('li.cost');
+                    const amountLi = offerExtensionUl.querySelector('li.amount');
+                    
+                    if (costLi && amountLi && !costLi.dataset.listenerAttached) {
+                        console.log('Found form elements, fetching property data...');
+                        
+                        fetch(`https://api.torn.com/v2/user?key=${localStorage.getItem('tornApiKey')}&selections=properties&stat=rented&sort=ASC`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.error) {
+                                    throw new Error(`API Error: ${data.error.error}`);
+                                }
+                                
+                                const property = data.properties[propertyId];
+                                console.log('Found property:', property);
+                                
+                                if (property) {
+                                    const dailyRent = property.rented ? property.rented.cost_per_day : 0;
+                                    const monthlyRent = Math.round((dailyRent * 30) / 50000) * 50000;
+                                    console.log('Daily rent:', dailyRent);
+                                    console.log('Calculated monthly rent:', monthlyRent);
+                                    
+                                    setTimeout(() => {
+                                        // Set the cost inputs
+                                        const costInputs = costLi.querySelectorAll('input.offerExtension.input-money');
+                                        console.log('Found cost inputs:', costInputs.length);
+                                        costInputs.forEach(input => {
+                                            console.log('Setting input value to:', monthlyRent);
+                                            input.value = monthlyRent;
+                                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                                            input.dispatchEvent(new Event('blur', { bubbles: true }));
+                                            input.dispatchEvent(new Event('focus', { bubbles: true }));
+                                        });
+
+                                        // Set the amount input to 30 days
+                                        const amountInput = amountLi.querySelector('input');
+                                        if (amountInput) {
+                                            console.log('Setting amount to 30 days');
+                                            amountInput.value = '30';
+                                            amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                            amountInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                            amountInput.dispatchEvent(new Event('blur', { bubbles: true }));
+                                            amountInput.dispatchEvent(new Event('focus', { bubbles: true }));
+                                        }
+                                        
+                                        // Disconnect observer once we've handled both inputs
+                                        observer.disconnect();
+                                    }, 500);
+                                    
+                                    costLi.dataset.listenerAttached = 'true';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error fetching property data:', error);
+                            });
+                    }
+                }
                 
                 if (nextButton && !nextButton.dataset.listenerAttached) {
                     console.log('Found next button');
                     nextButton.dataset.listenerAttached = 'true';
                     nextButton.addEventListener('click', () => {
                         console.log('Next button clicked');
-                        // Store the days left instead of the date
                         const daysLeft = window.propertyDaysLeft?.[propertyId] || 0;
                         localStorage.setItem(`property_offer_${propertyId}`, daysLeft.toString());
                     });
