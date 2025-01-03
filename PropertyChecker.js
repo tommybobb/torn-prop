@@ -724,6 +724,13 @@
                 });
 
                 row.innerHTML = `
+                    <style>
+                        @media (hover: none) and (pointer: coarse) {
+                            .log-offer-btn[title] {
+                                pointer-events: none;
+                            }
+                        }
+                    </style>
                     <td style="display: none;">${prop.propertyId}</td>
                     <td style="${STYLES.tableCell}">${prop.name}</td>
                     <td style="${STYLES.tableCell}">${displayStatus}</td>
