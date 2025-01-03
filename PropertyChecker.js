@@ -87,22 +87,85 @@
                     padding-left: 50% !important;
                     border-bottom: none !important;
                 }
-                
-                td:before {
-                    position: absolute;
-                    left: 8px;
-                    width: 45%;
-                    white-space: nowrap;
-                    font-weight: bold;
+
+                /* Special handling for property name, status, and days left */
+                td:nth-of-type(1),
+                td:nth-of-type(2),
+                td:nth-of-type(3) {
+                    display: inline-block;
+                    padding-left: 0 !important;
+                    width: auto;
+                }
+
+                td:nth-of-type(1)::after {
+                    content: " - ";
+                    margin: 0 5px;
+                }
+
+                td:nth-of-type(2)::after {
+                    content: " - ";
+                    margin: 0 5px;
+                }
+
+                td:nth-of-type(3) {
+                    padding-left: 0 !important;
+                }
+
+                td:nth-of-type(3)::after {
+                    content: " days left";
+                }
+
+                /* Daily Rent styling */
+                td:nth-of-type(4) {
+                    margin: 10px 0;
+                    padding-left: 0 !important;
                 }
                 
-                /* Labels for each td */
-                td:nth-of-type(1):before { content: "Property Name:"; }
-                td:nth-of-type(2):before { content: "Status:"; }
-                td:nth-of-type(3):before { content: "Days Left:"; }
-                td:nth-of-type(4):before { content: "Daily Rent:"; }
-                td:nth-of-type(5):before { content: "Renew:"; }
-                td:nth-of-type(6):before { content: "Offer:"; }
+                td:nth-of-type(4)::before {
+                    content: "Daily Rent: $";
+                    position: static;
+                    width: auto;
+                }
+
+                /* Create a flex container for buttons */
+                tr {
+                    position: relative;
+                }
+
+                /* Button row styling */
+                td:nth-of-type(5),
+                td:nth-of-type(6) {
+                    display: inline-block;
+                    width: calc(50% - 2.5px);
+                    padding: 0 !important;
+                    margin: 10px 0 0 0;
+                    vertical-align: top;
+                }
+
+                td:nth-of-type(5) {
+                    margin-right: 2.5px;
+                }
+
+                td:nth-of-type(6) {
+                    margin-left: 2.5px;
+                }
+
+                /* Button styling */
+                td:nth-of-type(5) a,
+                td:nth-of-type(6) button {
+                    width: 100%;
+                    padding: 10px !important;
+                    text-align: center;
+                    font-size: 1.1em;
+                    box-sizing: border-box;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0;
+                    border-radius: 3px;
+                    min-height: 37px;  /* Set explicit height to match */
+                    line-height: 1.2;
+                }
                 
                 /* Adjust filter section */
                 .filter-section {
