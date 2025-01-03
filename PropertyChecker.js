@@ -306,7 +306,7 @@
                 </div>
                 <div class="properties-content" style="display: none;">
                     <div style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 10px; flex: 0 1 auto; max-width: 400px; width: 100%;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex: 0 1 auto; max-width: 200px; width: 100%;">
                             <input type="text" 
                                    id="player-id-search" 
                                    placeholder="Search by Player ID" 
