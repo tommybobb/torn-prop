@@ -848,15 +848,6 @@
                 });
 
                 row.innerHTML = `
-                    <style>
-                        @media (hover: none) and (pointer: coarse) {
-                            .log-offer-btn[title] {
-                                pointer-events: auto !important;
-                                -webkit-tap-highlight-color: transparent;
-                                touch-action: manipulation;
-                            }
-                        }
-                    </style>
                     <td style="${STYLES.tableCell}">${prop.name}</td>
                     <td style="${STYLES.tableCell}">${displayStatus}</td>
                     <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
@@ -866,9 +857,8 @@
                     </td>
                     <td style="${STYLES.tableCell}">
                         <button class="log-offer-btn" data-property-id="${prop.propertyId}" data-days-left="${prop.daysLeft}"
-                            style="${STYLES.button}; position: relative;"
-                            title="${prop.offerMade ? 'Remove offer' : 'Log an offer'}"
-                            ontouchstart="">
+                            style="${STYLES.button}"
+                            title="${prop.offerMade ? 'Remove offer' : 'Log an offer'}">
                             ${prop.offerMade ? '❌' : '💸'}
                         </button>
                     </td>
@@ -878,25 +868,9 @@
                 // Add click handler for Log Offer button
                 const logOfferBtn = row.querySelector('.log-offer-btn');
                 
-                // Add these variables for scroll detection
-                let touchStartY = 0;
-                let touchEndY = 0;
-                const scrollThreshold = 5; // pixels of movement to consider as scrolling
-
-                // Modify the button press handler
-                const handleButtonPress = (e) => {
+                const handleButtonClick = (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    
-                    // For touch events, check if user was scrolling
-                    if (e.type === 'touchstart') {
-                        // Don't process if significant vertical movement occurred
-                        if (Math.abs(touchEndY - touchStartY) > scrollThreshold) {
-                            return;
-                        }
-                        // Prevent double-firing on mobile
-                        logOfferBtn.removeEventListener('click', handleButtonPress);
-                    }
                     
                     const propertyId = logOfferBtn.dataset.propertyId;
                     const daysLeft = parseInt(logOfferBtn.dataset.daysLeft);
@@ -922,32 +896,11 @@
                     displayPage(currentPage);
                 };
 
-                // Add touch event listeners for scroll detection
-                logOfferBtn.addEventListener('touchstart', (e) => {
-                    touchStartY = e.touches[0].clientY;
-                }, { passive: true });
-
-                logOfferBtn.addEventListener('touchmove', (e) => {
-                    touchEndY = e.touches[0].clientY;
-                }, { passive: true });
-
-                logOfferBtn.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    // Only process the click if there wasn't significant vertical movement
-                    if (Math.abs(touchEndY - touchStartY) <= scrollThreshold) {
-                        handleButtonPress(e);
-                    }
-                    // Reset touch coordinates
-                    touchStartY = 0;
-                    touchEndY = 0;
-                });
-
-                // Remove the old touchstart listener and update with new one
-                logOfferBtn.removeEventListener('touchstart', handleButtonPress);
-                logOfferBtn.addEventListener('click', handleButtonPress);
+                // Add click event listener
+                logOfferBtn.addEventListener('click', handleButtonClick);
             });
             
-            // Update page info with filtered count
+            // Update page info
             pageInfo.textContent = `Showing ${start + 1}-${end} of ${filteredProperties.length} (Page ${page} of ${totalPages})`;
             prevButton.disabled = page === 1;
             nextButton.disabled = page === totalPages;
