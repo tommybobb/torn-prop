@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.1
+// @version      3.2
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -610,9 +610,28 @@
                         }
                     }
                 </style>
-                <button class="stats-toggle" style="${STYLES.stats.toggleButton}">
-                    Show Statistics ▼
-                </button>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button class="stats-toggle" style="${STYLES.stats.toggleButton}">
+                        Show Statistics ▼
+                    </button>
+                    <button class="settings-toggle" style="${STYLES.stats.toggleButton}">
+                        Settings ⚙️
+                    </button>
+                </div>
+                
+                <!-- Settings Card -->
+                <div class="settings-content" style="display: none; ${STYLES.stats.content}; margin-bottom: 15px;">
+                    <h3 style="${STYLES.stats.heading}">Settings</h3>
+                    <div style="${STYLES.stats.grid}">
+                        ${createInputCard('API Key', 'api-key-input', false, localStorage.getItem('tornApiKey') || '')}
+                        ${createInputCard('Default Rental Period (days)', 'default-rental-period', false, localStorage.getItem('defaultRentalPeriod') || '30')}
+                        <button class="save-settings" style="${STYLES.stats.calculateButton}">
+                            Save Settings 💾
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Existing Stats Content -->
                 <div class="stats-content" style="display: none; ${STYLES.stats.content}">
                     <div class="stats-flex-container" style="${STYLES.stats.flexContainer}">
                         <!-- Revenue Stats Section -->
@@ -942,6 +961,62 @@
                 displayPage(currentPage);
             });
         }
+
+        // Add after the stats toggle event listener:
+        const settingsToggle = statsSection.querySelector('.settings-toggle');
+        const settingsContent = statsSection.querySelector('.settings-content');
+        const saveSettingsBtn = statsSection.querySelector('.save-settings');
+
+        if (settingsToggle && settingsContent) {
+            settingsToggle.addEventListener('click', () => {
+                const isVisible = settingsContent.style.display !== 'none';
+                settingsContent.style.display = isVisible ? 'none' : 'block';
+                settingsToggle.textContent = `Settings ${isVisible ? '⚙️' : '▼'}`;
+                
+                // Hide stats content when showing settings
+                if (!isVisible) {
+                    statsSection.querySelector('.stats-content').style.display = 'none';
+                    statsSection.querySelector('.stats-toggle').textContent = 'Show Statistics ▼';
+                }
+            });
+        }
+
+        if (saveSettingsBtn) {
+            // Add event listener for delete API key button
+            const deleteApiKeyBtn = statsSection.querySelector('.delete-api-key');
+            if (deleteApiKeyBtn) {
+                deleteApiKeyBtn.addEventListener('click', () => {
+                    if (confirm('Are you sure you want to delete your API key?')) {
+                        localStorage.removeItem('tornApiKey');
+                        statsSection.querySelector('.api-key-input').value = '';
+                        alert('API key deleted successfully!');
+                        location.reload();
+                    }
+                });
+            }
+
+            saveSettingsBtn.addEventListener('click', () => {
+                const apiKey = statsSection.querySelector('.api-key-input').value;
+                const rentalPeriod = statsSection.querySelector('.default-rental-period').value;
+
+                
+                if (apiKey) {
+                    localStorage.setItem('tornApiKey', apiKey);
+                }
+                
+                if (rentalPeriod) {
+                    localStorage.setItem('defaultRentalPeriod', rentalPeriod);
+                }
+                
+                // Show success message
+                alert('Settings saved successfully!');
+                
+                // Refresh the page to apply new API key if it changed
+                if (apiKey !== "" && apiKey !== localStorage.getItem('tornApiKey')) {
+                    location.reload();
+                }
+            });
+        }
     }
 
     // Add new function to observe offer submissions
@@ -976,37 +1051,51 @@
                                 
                                 if (property) {
                                     const dailyRent = property.rented ? property.rented.cost_per_day : 0;
-                                    const monthlyRent = Math.round((dailyRent * 30) / 50000) * 50000;
+                                    const defaultPeriod = parseInt(localStorage.getItem('defaultRentalPeriod')) || 30;
+                                    const monthlyRent = Math.round((dailyRent * defaultPeriod) / 50000) * 50000;
                                     console.log('Daily rent:', dailyRent);
                                     console.log('Calculated monthly rent:', monthlyRent);
                                     
-                                    setTimeout(() => {
-                                        // Set the cost inputs
-                                        const costInputs = costLi.querySelectorAll('input.offerExtension.input-money');
-                                        console.log('Found cost inputs:', costInputs.length);
-                                        costInputs.forEach(input => {
-                                            console.log('Setting input value to:', monthlyRent);
-                                            input.value = monthlyRent;
-                                            input.dispatchEvent(new Event('input', { bubbles: true }));
-                                            input.dispatchEvent(new Event('change', { bubbles: true }));
-                                            input.dispatchEvent(new Event('blur', { bubbles: true }));
-                                            input.dispatchEvent(new Event('focus', { bubbles: true }));
-                                        });
+                                    // Only run if we haven't processed these inputs yet
+                                    if (!costLi.dataset.processed) {
+                                        setTimeout(() => {
+                                            // Set the cost inputs - use more specific selector
+                                            const costInputs = costLi.querySelectorAll('input.offerExtension.input-money:not([data-processed])');
+                                            console.log('Found cost inputs:', costInputs.length);
+                                            costInputs.forEach(input => {
+                                                if (!input.dataset.processed) {
+                                                    console.log('Setting input value to:', monthlyRent);
+                                                    input.value = monthlyRent;
+                                                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                                                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                                                    input.dispatchEvent(new Event('blur', { bubbles: true }));
+                                                    input.dispatchEvent(new Event('focus', { bubbles: true }));
+                                                    input.dataset.processed = 'true';
+                                                }
+                                            });
 
-                                        // Set the amount input to 30 days
-                                        const amountInput = amountLi.querySelector('input');
-                                        if (amountInput) {
-                                            console.log('Setting amount to 30 days');
-                                            amountInput.value = '30';
-                                            amountInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                            amountInput.dispatchEvent(new Event('change', { bubbles: true }));
-                                            amountInput.dispatchEvent(new Event('blur', { bubbles: true }));
-                                            amountInput.dispatchEvent(new Event('focus', { bubbles: true }));
-                                        }
-                                        
-                                        // Disconnect observer once we've handled both inputs
-                                        observer.disconnect();
-                                    }, 500);
+                                            // Set the amount input - use more specific selector
+                                            const amountInput = amountLi.querySelector('input.input-money:not([data-processed])');
+                                            if (amountInput && !amountInput.dataset.processed) {
+                                                const defaultPeriod = parseInt(localStorage.getItem('defaultRentalPeriod')) || 30;
+                                                console.log('Setting amount to', defaultPeriod, 'days');
+                                                amountInput.value = defaultPeriod.toString();
+                                                amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                                amountInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                                amountInput.dispatchEvent(new Event('blur', { bubbles: true }));
+                                                amountInput.dispatchEvent(new Event('focus', { bubbles: true }));
+                                                amountInput.dataset.processed = 'true';
+                                            }
+                                            
+                                            // Mark the container as processed
+                                            costLi.dataset.processed = 'true';
+                                            
+                                            // Only disconnect if both inputs are processed
+                                            if (costLi.dataset.processed && amountInput?.dataset.processed) {
+                                                observer.disconnect();
+                                            }
+                                        }, 500);
+                                    }
                                     
                                     costLi.dataset.listenerAttached = 'true';
                                 }
@@ -1101,6 +1190,15 @@
         const inputStyle = hasSearchButton ? STYLES.stats.input.fieldLeft : STYLES.stats.input.fieldFull;
         const valueAttr = defaultValue ? `value="${defaultValue}"` : '';
         
+        // Add delete button for API key
+        const deleteButton = className === 'api-key-input' ? `
+            <button class="delete-api-key" 
+                    style="${STYLES.stats.input.button}; background: #662222; margin-left: 5px;" 
+                    title="Delete API Key">
+                🗑️
+            </button>
+        ` : '';
+        
         return `
             <div style="${STYLES.stats.card}">
                 <div style="${STYLES.stats.cardLabel}">${label}</div>
@@ -1114,6 +1212,7 @@
                            target="_blank" 
                            style="${STYLES.stats.input.button}">🔍</a>
                     ` : ''}
+                    ${deleteButton}
                 </div>
             </div>
         `;
