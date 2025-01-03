@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.9
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -734,7 +734,8 @@
                     </td>
                     <td style="${STYLES.tableCell}">
                         <button class="log-offer-btn" data-property-id="${prop.propertyId}" data-days-left="${prop.daysLeft}"
-                            style="${STYLES.button}">
+                            style="${STYLES.button}; position: relative;"
+                            title="${prop.offerMade ? 'Remove offer' : 'Log an offer'}">
                             ${prop.offerMade ? '❌' : '💸'}
                         </button>
                     </td>
@@ -749,32 +750,24 @@
                     const daysLeft = parseInt(logOfferBtn.dataset.daysLeft);
                     
                     if (logOfferBtn.textContent.trim() === '💸') {
-                        // Store the offer in localStorage
                         localStorage.setItem(`property_offer_${propertyId}`, daysLeft);
-                        
-                        // Update the property in the current dataset
-                        const property = properties.find(p => p.propertyId === propertyId);
-                        if (property) {
-                            property.offerMade = true;
-                        }
-                        
-                        // Update filter labels and redisplay the page
-                        updateFilterLabels(properties);
-                        displayPage(currentPage);  // This will apply any active filters
+                        logOfferBtn.textContent = '❌';
+                        logOfferBtn.title = 'Remove offer';
                     } else {
-                        // Remove the offer from localStorage
                         localStorage.removeItem(`property_offer_${propertyId}`);
-                        
-                        // Update the property in the current dataset
-                        const property = properties.find(p => p.propertyId === propertyId);
-                        if (property) {
-                            property.offerMade = false;
-                        }
-                        
-                        // Update filter labels and redisplay the page
-                        updateFilterLabels(properties);
-                        displayPage(currentPage);  // This will apply any active filters
+                        logOfferBtn.textContent = '💸';
+                        logOfferBtn.title = 'Log an offer';
                     }
+                    
+                    // Update the property in the current dataset
+                    const property = properties.find(p => p.propertyId === propertyId);
+                    if (property) {
+                        property.offerMade = !property.offerMade;
+                    }
+                    
+                    // Update filter labels and redisplay the page
+                    updateFilterLabels(properties);
+                    displayPage(currentPage);
                 });
             });
             
