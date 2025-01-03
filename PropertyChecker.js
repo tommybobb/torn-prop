@@ -330,6 +330,7 @@
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Daily Rent</th>
                                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
+                                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Offer</th>
                             </tr>
                         </thead>
                         <tbody id="properties-table-body">
@@ -658,8 +659,62 @@
                     <td style="${STYLES.tableCell}">
                         <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">${prop.buttonValue}</a>
                     </td>
+                    <td style="${STYLES.tableCell}">
+                        <button class="log-offer-btn" data-property-id="${prop.propertyId}" data-days-left="${prop.daysLeft}"
+                            style="${STYLES.button}">
+                            ${prop.offerMade ? '❌' : '💸'}
+                        </button>
+                    </td>
                 `;
                 tbody.appendChild(row);
+
+                // Add click handler for Log Offer button
+                const logOfferBtn = row.querySelector('.log-offer-btn');
+                logOfferBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const propertyId = logOfferBtn.dataset.propertyId;
+                    const daysLeft = logOfferBtn.dataset.daysLeft;
+                    
+                    if (logOfferBtn.textContent.trim() === '💸') {
+                        // Store the offer in localStorage
+                        localStorage.setItem(`property_offer_${propertyId}`, daysLeft);
+                        
+                        // Apply the offered color directly from STYLES
+                        row.style.backgroundColor = STYLES.statusColors.offered;
+                        
+                        // Update the row's hover handlers with the new base color
+                        row.addEventListener('mouseenter', () => {
+                            row.style.backgroundColor = STYLES.statusColors.hover;
+                        });
+                        
+                        row.addEventListener('mouseleave', () => {
+                            row.style.backgroundColor = STYLES.statusColors.offered;
+                        });
+                        
+                        // Update the button and status
+                        logOfferBtn.textContent = '❌';
+                        row.children[2].textContent = 'Offered';
+                    } else {
+                        // Remove the offer from localStorage
+                        localStorage.removeItem(`property_offer_${propertyId}`);
+                        
+                        // Reset the row color
+                        row.style.backgroundColor = '';
+                        
+                        // Reset hover handlers
+                        row.addEventListener('mouseenter', () => {
+                            row.style.backgroundColor = STYLES.statusColors.hover;
+                        });
+                        
+                        row.addEventListener('mouseleave', () => {
+                            row.style.backgroundColor = '';
+                        });
+                        
+                        // Reset the button and status
+                        logOfferBtn.textContent = '💸';
+                        row.children[2].textContent = prop.status;
+                    }
+                });
             });
             
             // Update page info with filtered count
