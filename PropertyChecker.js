@@ -851,7 +851,7 @@
                     <td style="${STYLES.tableCell}">${prop.name}</td>
                     <td style="${STYLES.tableCell}">${displayStatus}</td>
                     <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
-                    <td style="${STYLES.tableCell}">$${prop.costPerDay.toLocaleString()}</td>
+                    <td style="${STYLES.tableCell}">${prop.costPerDay.toLocaleString()}</td>
                     <td style="${STYLES.tableCell}">
                         <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">${prop.buttonValue}</a>
                     </td>
