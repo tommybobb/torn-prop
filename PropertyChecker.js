@@ -878,12 +878,22 @@
                 // Add click handler for Log Offer button
                 const logOfferBtn = row.querySelector('.log-offer-btn');
                 
-                // Handle button press
+                // Add these variables for scroll detection
+                let touchStartY = 0;
+                let touchEndY = 0;
+                const scrollThreshold = 5; // pixels of movement to consider as scrolling
+
+                // Modify the button press handler
                 const handleButtonPress = (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     
+                    // For touch events, check if user was scrolling
                     if (e.type === 'touchstart') {
+                        // Don't process if significant vertical movement occurred
+                        if (Math.abs(touchEndY - touchStartY) > scrollThreshold) {
+                            return;
+                        }
                         // Prevent double-firing on mobile
                         logOfferBtn.removeEventListener('click', handleButtonPress);
                     }
@@ -912,14 +922,29 @@
                     displayPage(currentPage);
                 };
 
-                // Add event listeners
-                logOfferBtn.addEventListener('touchstart', handleButtonPress, { passive: false });
-                logOfferBtn.addEventListener('click', handleButtonPress);
-                
-                // Prevent ghost clicks
+                // Add touch event listeners for scroll detection
+                logOfferBtn.addEventListener('touchstart', (e) => {
+                    touchStartY = e.touches[0].clientY;
+                }, { passive: true });
+
+                logOfferBtn.addEventListener('touchmove', (e) => {
+                    touchEndY = e.touches[0].clientY;
+                }, { passive: true });
+
                 logOfferBtn.addEventListener('touchend', (e) => {
                     e.preventDefault();
+                    // Only process the click if there wasn't significant vertical movement
+                    if (Math.abs(touchEndY - touchStartY) <= scrollThreshold) {
+                        handleButtonPress(e);
+                    }
+                    // Reset touch coordinates
+                    touchStartY = 0;
+                    touchEndY = 0;
                 });
+
+                // Remove the old touchstart listener and update with new one
+                logOfferBtn.removeEventListener('touchstart', handleButtonPress);
+                logOfferBtn.addEventListener('click', handleButtonPress);
             });
             
             // Update page info with filtered count
