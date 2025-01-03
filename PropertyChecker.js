@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.0
+// @version      3.1
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -858,7 +858,7 @@
                     <td style="${STYLES.tableCell}">
                         <button class="log-offer-btn" data-property-id="${prop.propertyId}" data-days-left="${prop.daysLeft}"
                             style="${STYLES.button}"
-                            title="${prop.offerMade ? 'Remove offer' : 'Log an offer'}">
+                            ${window.innerWidth > 768 ? `title="${prop.offerMade ? 'Remove offer' : 'Log an offer'}"` : ''}>
                             ${prop.offerMade ? '❌' : '💸'}
                         </button>
                     </td>
