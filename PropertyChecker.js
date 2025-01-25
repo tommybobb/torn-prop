@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.3
+// @version      3.4
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -658,6 +658,7 @@
                     <div style="${STYLES.stats.grid}">
                         ${createInputCard('API Key', 'api-key-input', false, localStorage.getItem('tornApiKey') || '')}
                         ${createInputCard('Default Rental Period (days)', 'default-rental-period', false, localStorage.getItem('defaultRentalPeriod') || '30')}
+                        ${createInputCard('Default Amount ($)', 'default-rental-amount', false, localStorage.getItem('defaultRentalAmount') || '23000000')}
                         <button class="save-settings" style="${STYLES.stats.calculateButton}">
                             Save Settings 💾
                         </button>
@@ -1031,6 +1032,7 @@
             saveSettingsBtn.addEventListener('click', () => {
                 const apiKey = statsSection.querySelector('.api-key-input').value;
                 const rentalPeriod = statsSection.querySelector('.default-rental-period').value;
+                const defaultRentalAmount = statsSection.querySelector('.default-rental-amount').value;
 
                 
                 if (apiKey) {
@@ -1039,6 +1041,10 @@
                 
                 if (rentalPeriod) {
                     localStorage.setItem('defaultRentalPeriod', rentalPeriod);
+                }
+
+                if (defaultRentalAmount) {
+                    localStorage.setItem('defaultRentalAmount', defaultRentalAmount);
                 }
                 
                 // Show success message
@@ -1050,6 +1056,28 @@
                 }
             });
         }
+
+        // Store the days left for each property in localStorage
+        const propertyDaysLeft = {};
+        properties.forEach(prop => {
+            propertyDaysLeft[prop.propertyId] = prop.daysLeft;
+        });
+        localStorage.setItem('propertyDaysLeft', JSON.stringify(propertyDaysLeft));
+    }
+
+    function getPropertyDaysLeft(propertyId) {
+        // Try to get from localStorage first
+        const storedData = localStorage.getItem('propertyDaysLeft');
+        if (storedData) {
+            try {
+                const propertyData = JSON.parse(storedData);
+                return propertyData[propertyId] || 0;
+            } catch (e) {
+                console.error('Error parsing propertyDaysLeft data:', e);
+                return 0;
+            }
+        }
+        return 0;
     }
 
     // Add new function to observe offer submissions
@@ -1061,6 +1089,9 @@
 
             console.log('Observing for offer submissions on property:', propertyId);
 
+            const daysLeft = getPropertyDaysLeft(propertyId);
+            console.log('Days left for property', propertyId, ':', daysLeft);
+
             const observer = new MutationObserver((mutations, obs) => {
                 const nextButton = document.querySelector('input[type="submit"][value="NEXT"]');
                 const offerExtensionUl = document.querySelector('ul.offerExtension-input');
@@ -1070,72 +1101,53 @@
                     const amountLi = offerExtensionUl.querySelector('li.amount');
                     
                     if (costLi && amountLi && !costLi.dataset.listenerAttached) {
-                        console.log('Found form elements, fetching property data...');
+                        console.log('Found form elements, setting default values...');
                         
-                        fetch(`https://api.torn.com/v2/user?key=${localStorage.getItem('tornApiKey')}&selections=properties&stat=rented&sort=ASC`)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.error) {
-                                    throw new Error(`API Error: ${data.error.error}`);
-                                }
-                                
-                                const property = data.properties[propertyId];
-                                console.log('Found property:', property);
-                                
-                                if (property) {
-                                    const dailyRent = property.rented ? property.rented.cost_per_day : 0;
-                                    const defaultPeriod = parseInt(localStorage.getItem('defaultRentalPeriod')) || 30;
-                                    const monthlyRent = Math.round((dailyRent * defaultPeriod) / 50000) * 50000;
-                                    console.log('Daily rent:', dailyRent);
-                                    console.log('Calculated monthly rent:', monthlyRent);
-                                    
-                                    // Only run if we haven't processed these inputs yet
-                                    if (!costLi.dataset.processed) {
-                                        setTimeout(() => {
-                                            // Set the cost inputs - use more specific selector
-                                            const costInputs = costLi.querySelectorAll('input.offerExtension.input-money:not([data-processed])');
-                                            console.log('Found cost inputs:', costInputs.length);
-                                            costInputs.forEach(input => {
-                                                if (!input.dataset.processed) {
-                                                    console.log('Setting input value to:', monthlyRent);
-                                                    input.value = monthlyRent;
-                                                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                                                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                                                    input.dispatchEvent(new Event('blur', { bubbles: true }));
-                                                    input.dispatchEvent(new Event('focus', { bubbles: true }));
-                                                    input.dataset.processed = 'true';
-                                                }
-                                            });
-
-                                            // Set the amount input - use more specific selector
-                                            const amountInput = amountLi.querySelector('input.input-money:not([data-processed])');
-                                            if (amountInput && !amountInput.dataset.processed) {
-                                                const defaultPeriod = parseInt(localStorage.getItem('defaultRentalPeriod')) || 30;
-                                                console.log('Setting amount to', defaultPeriod, 'days');
-                                                amountInput.value = defaultPeriod.toString();
-                                                amountInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                                amountInput.dispatchEvent(new Event('change', { bubbles: true }));
-                                                amountInput.dispatchEvent(new Event('blur', { bubbles: true }));
-                                                amountInput.dispatchEvent(new Event('focus', { bubbles: true }));
-                                                amountInput.dataset.processed = 'true';
-                                            }
-                                            
-                                            // Mark the container as processed
-                                            costLi.dataset.processed = 'true';
-                                            
-                                            // Only disconnect if both inputs are processed
-                                            if (costLi.dataset.processed && amountInput?.dataset.processed) {
-                                                observer.disconnect();
-                                            }
-                                        }, 500);
+                        // Get default values from localStorage
+                        const defaultPeriod = parseInt(localStorage.getItem('defaultRentalPeriod')) || 30;
+                        const defaultAmount = parseInt(localStorage.getItem('defaultRentalAmount')) || 23000000;
+                        
+                        // Only run if we haven't processed these inputs yet
+                        if (!costLi.dataset.processed) {
+                            setTimeout(() => {
+                                // Set the cost inputs - use more specific selector
+                                const costInputs = costLi.querySelectorAll('input.offerExtension.input-money:not([data-processed])');
+                                console.log('Found cost inputs:', costInputs.length);
+                                costInputs.forEach(input => {
+                                    if (!input.dataset.processed) {
+                                        console.log('Setting input value to:', defaultAmount);
+                                        input.value = defaultAmount;
+                                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                                        input.dispatchEvent(new Event('blur', { bubbles: true }));
+                                        input.dispatchEvent(new Event('focus', { bubbles: true }));
+                                        input.dataset.processed = 'true';
                                     }
-                                    
-                                    costLi.dataset.listenerAttached = 'true';
+                                });
+
+                                // Set the amount input - use more specific selector
+                                const amountInput = amountLi.querySelector('input.input-money:not([data-processed])');
+                                if (amountInput && !amountInput.dataset.processed) {
+                                    console.log('Setting amount to', defaultPeriod, 'days');
+                                    amountInput.value = defaultPeriod.toString();
+                                    amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                    amountInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                    amountInput.dispatchEvent(new Event('blur', { bubbles: true }));
+                                    amountInput.dispatchEvent(new Event('focus', { bubbles: true }));
+                                    amountInput.dataset.processed = 'true';
                                 }
-                            })
-                            .catch(error => {
-                                console.error('Error fetching property data:', error);
-                            });
+                                
+                                // Mark the container as processed
+                                costLi.dataset.processed = 'true';
+                                
+                                // Only disconnect if both inputs are processed
+                                if (costLi.dataset.processed && amountInput?.dataset.processed) {
+                                    observer.disconnect();
+                                }
+                            }, 500);
+                        }
+                        
+                        costLi.dataset.listenerAttached = 'true';
                     }
                 }
                 
@@ -1143,8 +1155,7 @@
                     console.log('Found next button');
                     nextButton.dataset.listenerAttached = 'true';
                     nextButton.addEventListener('click', () => {
-                        console.log('Next button clicked');
-                        const daysLeft = window.propertyDaysLeft?.[propertyId] || 0;
+                        console.log('Next button clicked - storing offer with days left:', daysLeft);
                         localStorage.setItem(`property_offer_${propertyId}`, daysLeft.toString());
                     });
                 }
