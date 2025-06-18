@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.4
+// @version      3.5
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -581,8 +581,8 @@
                     Object.entries(data.properties).forEach(([id, prop]) => {
                         const storedOffer = localStorage.getItem(`property_offer_${id}`);
                         if (storedOffer && prop.rented && 
-                            (prop.rented.days_left > parseInt(storedOffer) || // Renewal successful
-                             prop.rented.days_left === 0)) { // Rental expired
+                            (prop.rental_period_remaining > parseInt(storedOffer) || // Renewal successful
+                             prop.rental_period_remaining === 0)) { // Rental expired
                             localStorage.removeItem(`property_offer_${id}`);
                         }
                     });
@@ -594,15 +594,15 @@
                         id !== currentPropertyId
                     )
                     .map(([id, prop]) => ({
-                        propertyId: id,
-                        name: prop.property,
-                        status: prop.rented ? "Rented" : "Available",
-                        daysLeft: prop.rented ? prop.rented.days_left : 0,
-                        renew: prop.rented ?`https://www.torn.com/properties.php#/p=options&ID=${id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=lease`,
-                        offerMade: localStorage.getItem(`property_offer_${id}`) !== null,
-                        costPerDay: prop.rented ? prop.rented.cost_per_day : 0,
-                        buttonValue: prop.rented ? "Renew" : "Lease",
-                        rentedBy: prop.rented ? prop.rented.user_id : null
+                        propertyId: prop.id,
+                        name: prop.property.name,
+                        status: prop.status,
+                        daysLeft: prop.status ? prop.rental_period_remaining : 0,
+                        renew: prop.status == "rented" ?`https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=lease`,
+                        offerMade: localStorage.getItem(`property_offer_${prop.id}`) !== null,
+                        costPerDay: prop.status == "rented" ? prop.cost_per_day : 0,
+                        buttonValue: prop.status == "rented" ? "Renew" : "Lease",
+                        rentedBy: prop.status == "rented"   ? prop.used_by.id : null
                     }))
                     .sort((a, b) => a.daysLeft - b.daysLeft);
                 
