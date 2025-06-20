@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.6
+// @version      3.7
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -310,7 +310,6 @@
                 // If our container is gone but we're still on the properties page, recreate it
                 if (!propertiesContainer && propertiesPageWrap) {
                     createPropertiesTable();
-                    getCurrentPropertyId();
                     observeOfferSubmissions();
                 }
             }, 100)
@@ -330,7 +329,6 @@
                 
                 if (!propertiesContainer && propertiesPageWrap) {
                     createPropertiesTable();
-                    getCurrentPropertyId();
                     observeOfferSubmissions();
                 }
             }, 100); // Small delay to let React render
@@ -558,7 +556,7 @@
     }
 
     async function getAllProperties(apiKey) {
-        let allProperties = {};
+        let allProperties = [];
         let offset = 0;
         let batchSize = 100;
         let hasMore = true;
@@ -570,7 +568,10 @@
             if (data.error) throw new Error(`API Error: ${data.error.error}`);
             if (!data.properties) throw new Error('Invalid API response: missing properties data');
 
-            Object.assign(allProperties, data.properties);
+            // Convert the object to an array and add to allProperties
+            allProperties = allProperties.concat(Object.entries(data.properties));
+
+            console.log(`Fetched batch at offset ${offset}:`, Object.keys(data.properties).length, 'properties');
 
             const batchCount = Object.keys(data.properties).length;
             if (batchCount < batchSize) {
@@ -580,6 +581,7 @@
             }
         }
 
+        console.log('Total properties fetched:', allProperties.length);
         return allProperties;
     }
 
@@ -590,19 +592,17 @@
         try {
             const allProperties = await getAllProperties(apiKey);
 
-            // Check and clean up localStorage before processing properties
-            if (allProperties) {
-                Object.entries(allProperties).forEach(([id, prop]) => {
-                    const storedOffer = localStorage.getItem(`property_offer_${id}`);
-                    if (storedOffer && prop.rented && 
-                        (prop.rental_period_remaining > parseInt(storedOffer) || // Renewal successful
-                         prop.rental_period_remaining === 0)) { // Rental expired
-                        localStorage.removeItem(`property_offer_${id}`);
-                    }
-                });
-            }
-            
-            const properties = Object.entries(allProperties)
+            // Clean up localStorage before processing properties
+            allProperties.forEach(([id, prop]) => {
+                const storedOffer = localStorage.getItem(`property_offer_${id}`);
+                if (storedOffer && prop.rented && 
+                    (prop.rental_period_remaining > parseInt(storedOffer) ||
+                     prop.rental_period_remaining === 0)) {
+                    localStorage.removeItem(`property_offer_${id}`);
+                }
+            });
+
+            let properties = allProperties
                 .filter(([id, prop]) => 
                     !(prop.status === "none" && prop.owner) && 
                     prop.status !== "in_use"
@@ -617,11 +617,14 @@
                     costPerDay: prop.status == "rented" ? prop.cost_per_day : 0,
                     buttonValue: prop.status == "rented" ? "Renew" : "Lease",
                     rentedBy: prop.status == "rented"   ? prop.used_by.id : null
-                }))
-                .sort((a, b) => a.daysLeft - b.daysLeft);
-            
+                }));
+
+            console.log('Properties after filtering:', properties.length);
+
+            properties = properties.sort((a, b) => a.daysLeft - b.daysLeft);
+
             updateTable(properties);
-            
+
             // Store the days left for each property
             properties.forEach(prop => {
                 window.propertyDaysLeft = window.propertyDaysLeft || {};
@@ -897,7 +900,6 @@
             const end = Math.min(start + itemsPerPage, filteredProperties.length);
             const pageProperties = filteredProperties.slice(start, end);
 
-            console.log(filteredProperties);
             
             tbody.innerHTML = ''; // Clear existing rows
             
@@ -959,9 +961,7 @@
                     const property = properties.find(p => p.propertyId == propertyId);
                     if (property) {
                         property.offerMade = !property.offerMade;
-                        console.log('Updated property:', property);
                     } else {
-                        console.log('Property not found for id:', propertyId);
                     }
                     
                     // Update filter labels and redisplay the page
@@ -1201,7 +1201,6 @@
             if (targetElement) {
                 clearInterval(checkForElement);
                 createPropertiesTable();
-                getCurrentPropertyId();
                 observeOfferSubmissions();
                 setupNavigationObserver();
             } else if (attempts >= CONFIG.MAX_RETRIES) {
