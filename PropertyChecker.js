@@ -208,7 +208,7 @@
      * @param {Object} options - Request options
      * @returns {Promise} API response
      */
-    async function fetchAPI(endpoint, options = {}) {
+/*     async function fetchAPI(endpoint, options = {}) {
         const apiKey = localStorage.getItem('tornApiKey');
         if (!apiKey) throw new Error('No API key found');
 
@@ -225,7 +225,7 @@
             handleApiError(error);
             throw error;
         }
-    }
+    } */
 
     /**
      * Debounces a function
@@ -244,7 +244,7 @@
         };
     }
 
-    // Optimize property data processing
+/*     // Optimize property data processing
     function processPropertyData(properties) {
         return Object.entries(properties)
             .filter(([id, prop]) => 
@@ -263,9 +263,9 @@
                 rentedBy: prop.rented ? prop.rented.user_id : null
             }))
             .sort((a, b) => a.daysLeft - b.daysLeft);
-    }
+    } */
 
-    // Optimize table updates with DocumentFragment
+/*     // Optimize table updates with DocumentFragment
     function updateTableRows(tbody, properties) {
         const fragment = document.createDocumentFragment();
         
@@ -298,7 +298,7 @@
         tbody.innerHTML = '';
         tbody.appendChild(fragment);
     }
-
+ */
     // Optimize observers with weak references
     function setupNavigationObserver() {
         // Create a more specific observer for the properties content
@@ -343,9 +343,9 @@
      * @param {string} id - Button ID
      * @returns {string} HTML button string
      */
-    function createButton(text, id) {
+/*     function createButton(text, id) {
         return `<button id="${id}" style="${STYLES.button}">${text}</button>`;
-    }
+    } */
 
     /**
      * Determines the background color for a property row
@@ -565,7 +565,7 @@
             return;
         }
         
-        fetch(`https://api.torn.com/v2/user?key=${apiKey}&selections=properties&stat=rented&sort=ASC`)
+        fetch(`https://api.torn.com/v2/user/properties?key=${apiKey}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -590,8 +590,8 @@
                 
                 const properties = Object.entries(data.properties)
                     .filter(([id, prop]) => 
-                        prop.status !== "Owned by their spouse" && 
-                        id !== currentPropertyId
+                        !(prop.status === "none" && prop.owner) && 
+                        prop.status !== "in_use"
                     )
                     .map(([id, prop]) => ({
                         propertyId: prop.id,
@@ -881,6 +881,8 @@
             const start = (page - 1) * itemsPerPage;
             const end = Math.min(start + itemsPerPage, filteredProperties.length);
             const pageProperties = filteredProperties.slice(start, end);
+
+            console.log(filteredProperties);
             
             tbody.innerHTML = ''; // Clear existing rows
             
@@ -939,9 +941,12 @@
                     }
                     
                     // Update the property in the current dataset
-                    const property = properties.find(p => p.propertyId === propertyId);
+                    const property = properties.find(p => p.propertyId == propertyId);
                     if (property) {
                         property.offerMade = !property.offerMade;
+                        console.log('Updated property:', property);
+                    } else {
+                        console.log('Property not found for id:', propertyId);
                     }
                     
                     // Update filter labels and redisplay the page
