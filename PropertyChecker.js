@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.5
+// @version      3.6
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -557,64 +557,79 @@
         }
     }
 
-    function getPropertyData() {
-        const apiKey = localStorage.getItem('tornApiKey');
-        const currentPropertyId = localStorage.getItem('currentPropertyId');
-        if (!apiKey) {
-            // The table shouldn't exist without an API key now
-            return;
+    async function getAllProperties(apiKey) {
+        let allProperties = {};
+        let offset = 0;
+        let batchSize = 100;
+        let hasMore = true;
+
+        while (hasMore) {
+            const response = await fetch(`https://api.torn.com/v2/user/properties?key=${apiKey}&offset=${offset}`);
+            const data = await response.json();
+
+            if (data.error) throw new Error(`API Error: ${data.error.error}`);
+            if (!data.properties) throw new Error('Invalid API response: missing properties data');
+
+            Object.assign(allProperties, data.properties);
+
+            const batchCount = Object.keys(data.properties).length;
+            if (batchCount < batchSize) {
+                hasMore = false;
+            } else {
+                offset += batchSize;
+            }
         }
-        
-        fetch(`https://api.torn.com/v2/user/properties?key=${apiKey}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    throw new Error(`API Error: ${data.error.error}`);
-                }
-                
-                if (!data.properties) {
-                    throw new Error('Invalid API response: missing properties data');
-                }
-                
-                // Check and clean up localStorage before processing properties
-                if (data.properties) {
-                    Object.entries(data.properties).forEach(([id, prop]) => {
-                        const storedOffer = localStorage.getItem(`property_offer_${id}`);
-                        if (storedOffer && prop.rented && 
-                            (prop.rental_period_remaining > parseInt(storedOffer) || // Renewal successful
-                             prop.rental_period_remaining === 0)) { // Rental expired
-                            localStorage.removeItem(`property_offer_${id}`);
-                        }
-                    });
-                }
-                
-                const properties = Object.entries(data.properties)
-                    .filter(([id, prop]) => 
-                        !(prop.status === "none" && prop.owner) && 
-                        prop.status !== "in_use"
-                    )
-                    .map(([id, prop]) => ({
-                        propertyId: prop.id,
-                        name: prop.property.name,
-                        status: prop.status,
-                        daysLeft: prop.status ? prop.rental_period_remaining : 0,
-                        renew: prop.status == "rented" ?`https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=lease`,
-                        offerMade: localStorage.getItem(`property_offer_${prop.id}`) !== null,
-                        costPerDay: prop.status == "rented" ? prop.cost_per_day : 0,
-                        buttonValue: prop.status == "rented" ? "Renew" : "Lease",
-                        rentedBy: prop.status == "rented"   ? prop.used_by.id : null
-                    }))
-                    .sort((a, b) => a.daysLeft - b.daysLeft);
-                
-                updateTable(properties);
-                
-                // Store the days left for each property
-                properties.forEach(prop => {
-                    window.propertyDaysLeft = window.propertyDaysLeft || {};
-                    window.propertyDaysLeft[prop.propertyId] = prop.daysLeft;
+
+        return allProperties;
+    }
+
+    async function getPropertyData() {
+        const apiKey = localStorage.getItem('tornApiKey');
+        if (!apiKey) return;
+
+        try {
+            const allProperties = await getAllProperties(apiKey);
+
+            // Check and clean up localStorage before processing properties
+            if (allProperties) {
+                Object.entries(allProperties).forEach(([id, prop]) => {
+                    const storedOffer = localStorage.getItem(`property_offer_${id}`);
+                    if (storedOffer && prop.rented && 
+                        (prop.rental_period_remaining > parseInt(storedOffer) || // Renewal successful
+                         prop.rental_period_remaining === 0)) { // Rental expired
+                        localStorage.removeItem(`property_offer_${id}`);
+                    }
                 });
-            })
-            .catch(handleApiError);
+            }
+            
+            const properties = Object.entries(allProperties)
+                .filter(([id, prop]) => 
+                    !(prop.status === "none" && prop.owner) && 
+                    prop.status !== "in_use"
+                )
+                .map(([id, prop]) => ({
+                    propertyId: prop.id,
+                    name: prop.property.name,
+                    status: prop.status,
+                    daysLeft: prop.status ? prop.rental_period_remaining : 0,
+                    renew: prop.status == "rented" ?`https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=lease`,
+                    offerMade: localStorage.getItem(`property_offer_${prop.id}`) !== null,
+                    costPerDay: prop.status == "rented" ? prop.cost_per_day : 0,
+                    buttonValue: prop.status == "rented" ? "Renew" : "Lease",
+                    rentedBy: prop.status == "rented"   ? prop.used_by.id : null
+                }))
+                .sort((a, b) => a.daysLeft - b.daysLeft);
+            
+            updateTable(properties);
+            
+            // Store the days left for each property
+            properties.forEach(prop => {
+                window.propertyDaysLeft = window.propertyDaysLeft || {};
+                window.propertyDaysLeft[prop.propertyId] = prop.daysLeft;
+            });
+        } catch (err) {
+            handleApiError(err);
+        }
     }
 
     function updateTable(properties) {
@@ -1173,31 +1188,6 @@
                 characterData: true
             });
         }
-    }
-
-    // Add this new function after the other API-related functions
-    function getCurrentPropertyId() {
-        const apiKey = localStorage.getItem('tornApiKey');
-        if (!apiKey) return;
-
-        // Only fetch once per minute (60000 milliseconds)
-        const now = Date.now();
-        const lastFetched = localStorage.getItem('propertyId_lastFetched');
-        if (lastFetched && (now - parseInt(lastFetched) < 60000)) {
-            return Promise.resolve(localStorage.getItem('currentPropertyId'));
-        }
-
-        return fetch(`https://api.torn.com/v2/user?key=${apiKey}&selections=profile`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    throw new Error(`API Error: ${data.error.error}`);
-                }
-                localStorage.setItem('currentPropertyId', data.property_id);
-                localStorage.setItem('propertyId_lastFetched', now.toString());
-                return data.property_id;
-            })
-            .catch(handleApiError);
     }
 
     // Initialize the script
