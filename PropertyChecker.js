@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.7
+// @version      3.8
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -310,6 +310,7 @@
                 // If our container is gone but we're still on the properties page, recreate it
                 if (!propertiesContainer && propertiesPageWrap) {
                     createPropertiesTable();
+                    getUserId();
                     observeOfferSubmissions();
                 }
             }, 100)
@@ -328,7 +329,8 @@
                 const propertiesPageWrap = document.querySelector('#properties-page-wrap');
                 
                 if (!propertiesContainer && propertiesPageWrap) {
-                    createPropertiesTable();
+                    createPropertiesTable();    
+                    getUserId();
                     observeOfferSubmissions();
                 }
             }, 100); // Small delay to let React render
@@ -587,6 +589,10 @@
 
     async function getPropertyData() {
         const apiKey = localStorage.getItem('tornApiKey');
+        const currentUserId = localStorage.getItem('property_currentUserId');
+
+        console.log("currentUserId: " + currentUserId);
+
         if (!apiKey) return;
 
         try {
@@ -603,15 +609,16 @@
             });
 
             let properties = allProperties
-                .filter(([id, prop]) => 
-                    !(prop.status === "none" && prop.owner) && 
+                .filter(([id, prop]) =>
+                    
+                    !(prop.status === "none" && Number(prop.owner.id) !== Number(currentUserId)) && 
                     prop.status !== "in_use"
                 )
                 .map(([id, prop]) => ({
                     propertyId: prop.id,
                     name: prop.property.name,
                     status: prop.status,
-                    daysLeft: prop.status ? prop.rental_period_remaining : 0,
+                    daysLeft: prop.status !== "none" ? prop.rental_period_remaining : 0,
                     renew: prop.status == "rented" ?`https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=lease`,
                     offerMade: localStorage.getItem(`property_offer_${prop.id}`) !== null,
                     costPerDay: prop.status == "rented" ? prop.cost_per_day : 0,
@@ -630,6 +637,8 @@
                 window.propertyDaysLeft = window.propertyDaysLeft || {};
                 window.propertyDaysLeft[prop.propertyId] = prop.daysLeft;
             });
+
+
         } catch (err) {
             handleApiError(err);
         }
@@ -1201,6 +1210,7 @@
             if (targetElement) {
                 clearInterval(checkForElement);
                 createPropertiesTable();
+                getUserId();
                 observeOfferSubmissions();
                 setupNavigationObserver();
             } else if (attempts >= CONFIG.MAX_RETRIES) {
@@ -1222,6 +1232,30 @@
                 </div>
             </div>
         `;
+    }
+
+    function getUserId() {
+        const apiKey = localStorage.getItem('tornApiKey');
+        if (!apiKey) return;
+
+        // Only fetch once per minute (60000 milliseconds)
+        const now = Date.now();
+        const lastFetched = localStorage.getItem('propertyId_lastFetched');
+        if (lastFetched && (now - parseInt(lastFetched) < 60000)) {
+            return Promise.resolve(localStorage.getItem('property_currentUserId'));
+        }
+
+        return fetch(`https://api.torn.com/v2/user?key=${apiKey}&selections=profile`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(`API Error: ${data.error.error}`);
+                }
+                localStorage.setItem('property_currentUserId', data.player_id);
+                localStorage.setItem('propertyId_lastFetched', now.toString());
+                return data.player_id;
+            })
+            .catch(handleApiError);
     }
 
     function createInputCard(label, className, hasSearchButton = false, defaultValue = '') {
