@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.8
+// @version      3.9
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -583,7 +583,7 @@
             }
         }
 
-        console.log('Total properties fetched:', allProperties.length);
+        console.log('Total properties fetched:', allProperties.length); //4837907
         return allProperties;
     }
 
@@ -600,11 +600,12 @@
 
             // Clean up localStorage before processing properties
             allProperties.forEach(([id, prop]) => {
-                const storedOffer = localStorage.getItem(`property_offer_${id}`);
-                if (storedOffer && prop.rented && 
+                const storedOffer = localStorage.getItem(`property_offer_${prop.id}`);
+
+                if (storedOffer && prop.status === "rented" && 
                     (prop.rental_period_remaining > parseInt(storedOffer) ||
-                     prop.rental_period_remaining === 0)) {
-                    localStorage.removeItem(`property_offer_${id}`);
+                     prop.rental_period_remaining == 0)) {
+                    localStorage.removeItem(`property_offer_${prop.id}`);
                 }
             });
 
@@ -618,7 +619,7 @@
                     propertyId: prop.id,
                     name: prop.property.name,
                     status: prop.status,
-                    daysLeft: prop.status !== "none" ? prop.rental_period_remaining : 0,
+                    daysLeft: prop.status !== "none" ? (prop.rental_period_remaining || 0) : 0,
                     renew: prop.status == "rented" ?`https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=lease`,
                     offerMade: localStorage.getItem(`property_offer_${prop.id}`) !== null,
                     costPerDay: prop.status == "rented" ? prop.cost_per_day : 0,
