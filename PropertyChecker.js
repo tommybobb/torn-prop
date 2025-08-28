@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.9
+// @version      3.9.2
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
 // @grant        none
 // @run-at       document-start
+// @downloadURL https://update.greasyfork.org/scripts/522408/Torn%20Properties%20Manager.user.js
+// @updateURL https://update.greasyfork.org/scripts/522408/Torn%20Properties%20Manager.meta.js
 // ==/UserScript==
 
 (function() {
@@ -208,24 +210,7 @@
      * @param {Object} options - Request options
      * @returns {Promise} API response
      */
-/*     async function fetchAPI(endpoint, options = {}) {
-        const apiKey = localStorage.getItem('tornApiKey');
-        if (!apiKey) throw new Error('No API key found');
 
-        try {
-            const response = await fetch(`${CONFIG.API_ENDPOINT}/${endpoint}?key=${apiKey}${options.params || ''}`);
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(`API Error: ${data.error.error}`);
-            }
-            
-            return data;
-        } catch (error) {
-            handleApiError(error);
-            throw error;
-        }
-    } */
 
     /**
      * Debounces a function
@@ -244,61 +229,7 @@
         };
     }
 
-/*     // Optimize property data processing
-    function processPropertyData(properties) {
-        return Object.entries(properties)
-            .filter(([id, prop]) => 
-                prop.status !== "Owned by their spouse" && 
-                id !== localStorage.getItem('currentPropertyId')
-            )
-            .map(([id, prop]) => ({
-                propertyId: id,
-                name: prop.property,
-                status: prop.rented ? "Rented" : "Available",
-                daysLeft: prop.rented ? prop.rented.days_left : 0,
-                renew: `https://www.torn.com/properties.php#/p=options&ID=${id}&tab=${prop.rented ? 'offerExtension' : 'lease'}`,
-                offerMade: localStorage.getItem(`property_offer_${id}`) !== null,
-                costPerDay: prop.rented ? prop.rented.cost_per_day : 0,
-                buttonValue: prop.rented ? "Renew" : "Lease",
-                rentedBy: prop.rented ? prop.rented.user_id : null
-            }))
-            .sort((a, b) => a.daysLeft - b.daysLeft);
-    } */
 
-/*     // Optimize table updates with DocumentFragment
-    function updateTableRows(tbody, properties) {
-        const fragment = document.createDocumentFragment();
-        
-        properties.forEach(prop => {
-            const row = document.createElement('tr');
-            const baseColor = getPropertyRowColor(prop);
-            
-            row.style.cssText = `transition: background-color 0.2s ease; cursor: pointer; background-color: ${baseColor};`;
-            
-            const handleHover = (isHover) => {
-                row.style.backgroundColor = isHover ? STYLES.statusColors.hover : baseColor;
-            };
-            
-            row.addEventListener('mouseenter', () => handleHover(true));
-            row.addEventListener('mouseleave', () => handleHover(false));
-            
-            row.innerHTML = `
-                <td style="${STYLES.tableCell}">${prop.propertyId}</td>
-                <td style="${STYLES.tableCell}">${prop.name}</td>
-                <td style="${STYLES.tableCell}">${prop.offerMade ? 'Offered' : prop.status}</td>
-                <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
-                <td style="${STYLES.tableCell}">
-                    <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">${prop.buttonValue}</a>
-                </td>
-            `;
-            
-            fragment.appendChild(row);
-        });
-        
-        tbody.innerHTML = '';
-        tbody.appendChild(fragment);
-    }
- */
     // Optimize observers with weak references
     function setupNavigationObserver() {
         // Create a more specific observer for the properties content
@@ -564,7 +495,7 @@
         let hasMore = true;
 
         while (hasMore) {
-            const response = await fetch(`https://api.torn.com/v2/user/properties?key=${apiKey}&offset=${offset}`);
+            const response = await fetch(`https://api.torn.com/v2/user/properties?filters=ownedByUser&key=${apiKey}&offset=${offset}`);
             const data = await response.json();
 
             if (data.error) throw new Error(`API Error: ${data.error.error}`);
@@ -1184,10 +1115,24 @@
                 if (nextButton && !nextButton.dataset.listenerAttached) {
                     console.log('Found next button');
                     nextButton.dataset.listenerAttached = 'true';
-                    nextButton.addEventListener('click', () => {
-                        console.log('Next button clicked - storing offer with days left:', daysLeft);
-                        localStorage.setItem(`property_offer_${propertyId}`, daysLeft.toString());
-                    });
+                    nextButton.addEventListener('click', (event) => {
+                        console.log('Next button clicked - resolving current property data...');
+                        
+                        // Resolve propertyId and daysLeft fresh at click time
+                        const currentUrl = new URL(window.location.href);
+                        const currentPropertyId = currentUrl.hash.match(/ID=(\d+)/)?.[1];
+                        const currentDaysLeft = currentPropertyId ? getPropertyDaysLeft(currentPropertyId) : 0;
+                        
+                        console.log('Current property ID:', currentPropertyId);
+                        console.log('Current days left:', currentDaysLeft);
+                        
+                        if (currentPropertyId && currentDaysLeft > 0) {
+                            console.log('Storing offer with days left:', currentDaysLeft);
+                            localStorage.setItem(`property_offer_${currentPropertyId}`, currentDaysLeft.toString());
+                        } else {
+                            console.warn('Could not store offer - missing property ID or invalid days left');
+                        }
+                    }, { capture: true });
                 }
             });
 
@@ -1197,6 +1142,33 @@
                 attributes: true,
                 characterData: true
             });
+
+            // Add delegated event listener as fallback for DOM replacements
+            document.body.addEventListener('click', (event) => {
+                if (event.target && 
+                    event.target.type === 'submit' && 
+                    event.target.value === 'NEXT' &&
+                    !event.target.dataset.delegateHandled) {
+                    
+                    console.log('Delegated click handler triggered for NEXT button');
+                    event.target.dataset.delegateHandled = 'true';
+                    
+                    // Resolve propertyId and daysLeft fresh at click time
+                    const currentUrl = new URL(window.location.href);
+                    const currentPropertyId = currentUrl.hash.match(/ID=(\d+)/)?.[1];
+                    const currentDaysLeft = currentPropertyId ? getPropertyDaysLeft(currentPropertyId) : 0;
+                    
+                    console.log('Delegated - Current property ID:', currentPropertyId);
+                    console.log('Delegated - Current days left:', currentDaysLeft);
+                    
+                    if (currentPropertyId && currentDaysLeft > 0) {
+                        console.log('Delegated - Storing offer with days left:', currentDaysLeft);
+                        localStorage.setItem(`property_offer_${currentPropertyId}`, currentDaysLeft.toString());
+                    } else {
+                        console.warn('Delegated - Could not store offer - missing property ID or invalid days left');
+                    }
+                }
+            }, { capture: true });
         }
     }
 
