@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.9.2
+// @version      4.0.0
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -18,7 +18,7 @@
     const STYLES = {
         container: 'margin: 20px; background: #2d2d2d; padding: 15px; border-radius: 5px;',
         button: 'background: #444; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;',
-        tableCell: 'padding: 8px; border-bottom: 1px solid #444; color: #fff;',
+        tableCell: 'padding: 16px 8px; border-bottom: 1px solid #444; color: #fff;',
         statusColors: {
             offered: 'rgba(0, 255, 0, 0.1)',
             expired: 'rgba(255, 0, 0, 0.1)',
@@ -134,27 +134,16 @@
                     position: relative;
                 }
 
-                /* Button row styling */
-                td:nth-of-type(5),
-                td:nth-of-type(6) {
-                    display: inline-block;
-                    width: calc(50% - 2.5px);
+                /* Button styling - only one button now */
+                td:nth-of-type(5) {
+                    display: block;
+                    width: 100%;
                     padding: 0 !important;
                     margin: 10px 0 0 0;
-                    vertical-align: top;
-                }
-
-                td:nth-of-type(5) {
-                    margin-right: 2.5px;
-                }
-
-                td:nth-of-type(6) {
-                    margin-left: 2.5px;
                 }
 
                 /* Button styling */
-                td:nth-of-type(5) a,
-                td:nth-of-type(6) button {
+                td:nth-of-type(5) a {
                     width: 100%;
                     padding: 10px !important;
                     text-align: center;
@@ -284,9 +273,16 @@
      * @returns {string} CSS background-color value
      */
     function getPropertyRowColor(property) {
-        if (property.offerMade) return STYLES.statusColors.offered;
-        if (property.daysLeft === 0) return STYLES.statusColors.expired;
-        if (property.daysLeft <= 10) return STYLES.statusColors.warning;
+        // Green: Has lease extension OR is for_rent status with empty used_by
+        if (property.lease_extension !== null && property.lease_extension !== undefined) return STYLES.statusColors.offered;
+        if (property.status === "for_rent" && property.usedBy.length === 0) return STYLES.statusColors.offered;
+        
+        // Red: Status is "none" with empty used_by (unused empty property)
+        if (property.status === "none" && property.usedBy.length === 0) return STYLES.statusColors.expired;
+        
+        // Orange: No lease extension but lease has 10 or fewer days remaining
+        if ((property.lease_extension === null || property.lease_extension === undefined) && property.daysLeft <= 10 && property.daysLeft > 0) return STYLES.statusColors.warning;
+        
         return '';
     }
 
@@ -371,10 +367,6 @@
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                             <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
-                                <input type="checkbox" id="hide-offered" style="cursor: pointer;">
-                                Hide Offered
-                            </label>
-                            <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
                                 <input type="checkbox" id="hide-available" style="cursor: pointer;">
                                 Hide Available
                             </label>
@@ -386,12 +378,11 @@
                             <thead>
                                 <tr>
                                     <th style="display: none;">Property ID</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Daily Rent</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Offer</th>
+                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
+                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
+                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
+                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Daily Rent</th>
+                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
                                 </tr>
                             </thead>
                             <tbody id="properties-table-body">
@@ -529,21 +520,13 @@
         try {
             const allProperties = await getAllProperties(apiKey);
 
-            // Clean up localStorage before processing properties
-            allProperties.forEach(([id, prop]) => {
-                const storedOffer = localStorage.getItem(`property_offer_${prop.id}`);
-
-                if (storedOffer && prop.status === "rented" && 
-                    (prop.rental_period_remaining > parseInt(storedOffer) ||
-                     prop.rental_period_remaining == 0)) {
-                    localStorage.removeItem(`property_offer_${prop.id}`);
-                }
-            });
+            // No localStorage cleanup needed - using API lease_extension data
 
             let properties = allProperties
                 .filter(([id, prop]) =>
-                    
+                    // Keep properties that are not "none" status owned by others
                     !(prop.status === "none" && Number(prop.owner.id) !== Number(currentUserId)) && 
+                    // Exclude in_use properties
                     prop.status !== "in_use"
                 )
                 .map(([id, prop]) => ({
@@ -552,10 +535,11 @@
                     status: prop.status,
                     daysLeft: prop.status !== "none" ? (prop.rental_period_remaining || 0) : 0,
                     renew: prop.status == "rented" ?`https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=offerExtension` : `https://www.torn.com/properties.php#/p=options&ID=${prop.id}&tab=lease`,
-                    offerMade: localStorage.getItem(`property_offer_${prop.id}`) !== null,
+                    lease_extension: prop.lease_extension,
                     costPerDay: prop.status == "rented" ? prop.cost_per_day : 0,
                     buttonValue: prop.status == "rented" ? "Renew" : "Lease",
-                    rentedBy: prop.status == "rented"   ? prop.used_by.id : null
+                    rentedBy: prop.status == "rented" ? prop.used_by.id : null,
+                    usedBy: prop.used_by || []
                 }));
 
             console.log('Properties after filtering:', properties.length);
@@ -564,11 +548,7 @@
 
             updateTable(properties);
 
-            // Store the days left for each property
-            properties.forEach(prop => {
-                window.propertyDaysLeft = window.propertyDaysLeft || {};
-                window.propertyDaysLeft[prop.propertyId] = prop.daysLeft;
-            });
+            // Property days left is now handled directly from API data
 
 
         } catch (err) {
@@ -731,36 +711,22 @@
         // Function to update filter labels with counts
         function updateFilterLabels(properties) {
             const availableCount = properties.filter(prop => prop.status === "Available").length;
-            const offeredCount = properties.filter(prop => prop.offerMade).length;
             
             const hideAvailableLabel = document.getElementById('hide-available').parentElement;
-            const hideOfferedLabel = document.getElementById('hide-offered').parentElement;
             
             hideAvailableLabel.innerHTML = `
                 <input type="checkbox" id="hide-available" style="cursor: pointer;">
                 Hide Available (${availableCount})
             `;
-            hideOfferedLabel.innerHTML = `
-                <input type="checkbox" id="hide-offered" style="cursor: pointer;">
-                Hide Offered (${offeredCount})
-            `;
             
-            // Restore checkbox states
+            // Restore checkbox state
             const newAvailableCheckbox = document.getElementById('hide-available');
-            const newOfferedCheckbox = document.getElementById('hide-offered');
             
             newAvailableCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
-            newOfferedCheckbox.checked = localStorage.getItem('hideOfferedProperties') === 'true';
             
-            // Re-attach event listeners
+            // Re-attach event listener
             newAvailableCheckbox.addEventListener('change', () => {
                 localStorage.setItem('hideAvailableProperties', newAvailableCheckbox.checked);
-                currentPage = 1;
-                displayPage(currentPage);
-            });
-            
-            newOfferedCheckbox.addEventListener('change', () => {
-                localStorage.setItem('hideOfferedProperties', newOfferedCheckbox.checked);
                 currentPage = 1;
                 displayPage(currentPage);
             });
@@ -768,39 +734,24 @@
 
         // Add filter functionality
         const hideAvailable = document.getElementById('hide-available');
-        const hideOffered = document.getElementById('hide-offered');
         const hideAvailableLabel = hideAvailable.parentElement;
-        const hideOfferedLabel = hideOffered.parentElement;
         
         // Calculate counts
         const availableCount = properties.filter(prop => prop.status === "Available").length;
-        const offeredCount = properties.filter(prop => prop.offerMade).length;
         
         // Update labels with counts
         hideAvailableLabel.innerHTML = `
             <input type="checkbox" id="hide-available" style="cursor: pointer;">
             Hide Available (${availableCount})
         `;
-        hideOfferedLabel.innerHTML = `
-            <input type="checkbox" id="hide-offered" style="cursor: pointer;">
-            Hide Offered (${offeredCount})
-        `;
         
-        // Restore checkbox states
+        // Restore checkbox state
         const newAvailableCheckbox = document.getElementById('hide-available');
-        const newOfferedCheckbox = document.getElementById('hide-offered');
         newAvailableCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
-        newOfferedCheckbox.checked = localStorage.getItem('hideOfferedProperties') === 'true';
         
-        // Attach event listeners
+        // Attach event listener
         newAvailableCheckbox.addEventListener('change', () => {
             localStorage.setItem('hideAvailableProperties', newAvailableCheckbox.checked);
-            currentPage = 1;
-            displayPage(currentPage);
-        });
-        
-        newOfferedCheckbox.addEventListener('change', () => {
-            localStorage.setItem('hideOfferedProperties', newOfferedCheckbox.checked);
             currentPage = 1;
             displayPage(currentPage);
         });
@@ -809,20 +760,11 @@
             const searchId = document.getElementById('player-id-search')?.value.trim();
             let filtered = [...properties]; // Create a copy of the properties array
             
-            // Get current checkbox states directly from the elements
+            // Get current checkbox state directly from the element
             const hideAvailable = document.getElementById('hide-available')?.checked;
-            const hideOffered = document.getElementById('hide-offered')?.checked;
             
             if (hideAvailable) {
                 filtered = filtered.filter(prop => prop.status !== "Available");
-            }
-            
-            if (hideOffered) {
-                // Explicitly check the localStorage for each property
-                filtered = filtered.filter(prop => {
-                    const hasOffer = localStorage.getItem(`property_offer_${prop.propertyId}`) !== null;
-                    return !hasOffer;
-                });
             }
             
             if (searchId) {
@@ -846,7 +788,17 @@
             
             pageProperties.forEach((prop, index) => {
                 const row = document.createElement('tr');
-                const displayStatus = prop.offerMade ? 'Offered' : prop.status;
+                // Determine display status based on lease extension
+                let displayStatus = prop.status;
+                if (prop.lease_extension && prop.lease_extension.period) {
+                    displayStatus = `Lease Offered (${prop.lease_extension.period} days)`;
+                } else if (prop.status === "for_rent") {
+                    displayStatus = "For Rent";
+                } else if (prop.status === "rented") {
+                    displayStatus = "Rented";
+                } else if (prop.status === "none") {
+                    displayStatus = "Empty";
+                }
                 const baseColor = getPropertyRowColor(prop);
                 
                 row.style.cssText = `transition: background-color 0.2s ease; cursor: pointer; background-color: ${baseColor};`;
@@ -868,50 +820,9 @@
                     <td style="${STYLES.tableCell}">
                         <a href="${prop.renew}" target="_blank" style="${STYLES.button}; text-decoration: none;">${prop.buttonValue}</a>
                     </td>
-                    <td style="${STYLES.tableCell}">
-                        <button class="log-offer-btn" data-property-id="${prop.propertyId}" data-days-left="${prop.daysLeft}"
-                            style="${STYLES.button}"
-                            ${window.innerWidth > 768 ? `title="${prop.offerMade ? 'Remove offer' : 'Log an offer'}"` : ''}>
-                            ${prop.offerMade ? '❌' : '💸'}
-                        </button>
-                    </td>
                 `;
                 tbody.appendChild(row);
 
-                // Add click handler for Log Offer button
-                const logOfferBtn = row.querySelector('.log-offer-btn');
-                
-                const handleButtonClick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    const propertyId = logOfferBtn.dataset.propertyId;
-                    const daysLeft = parseInt(logOfferBtn.dataset.daysLeft);
-                    
-                    if (logOfferBtn.textContent.trim() === '💸') {
-                        localStorage.setItem(`property_offer_${propertyId}`, daysLeft);
-                        logOfferBtn.textContent = '❌';
-                        logOfferBtn.title = 'Remove offer';
-                    } else {
-                        localStorage.removeItem(`property_offer_${propertyId}`);
-                        logOfferBtn.textContent = '💸';
-                        logOfferBtn.title = 'Log an offer';
-                    }
-                    
-                    // Update the property in the current dataset
-                    const property = properties.find(p => p.propertyId == propertyId);
-                    if (property) {
-                        property.offerMade = !property.offerMade;
-                    } else {
-                    }
-                    
-                    // Update filter labels and redisplay the page
-                    updateFilterLabels(properties);
-                    displayPage(currentPage);
-                };
-
-                // Add click event listener
-                logOfferBtn.addEventListener('click', handleButtonClick);
             });
             
             // Update page info
@@ -1018,43 +929,20 @@
             });
         }
 
-        // Store the days left for each property in localStorage
-        const propertyDaysLeft = {};
-        properties.forEach(prop => {
-            propertyDaysLeft[prop.propertyId] = prop.daysLeft;
-        });
-        localStorage.setItem('propertyDaysLeft', JSON.stringify(propertyDaysLeft));
+        // Property days left no longer stored in localStorage - using API data directly
     }
 
-    function getPropertyDaysLeft(propertyId) {
-        // Try to get from localStorage first
-        const storedData = localStorage.getItem('propertyDaysLeft');
-        if (storedData) {
-            try {
-                const propertyData = JSON.parse(storedData);
-                return propertyData[propertyId] || 0;
-            } catch (e) {
-                console.error('Error parsing propertyDaysLeft data:', e);
-                return 0;
-            }
-        }
-        return 0;
-    }
 
-    // Add new function to observe offer submissions
+    // Auto-fill functionality for offer forms (keeping this for user convenience)
     function observeOfferSubmissions() {
         const url = new URL(window.location.href);
         if (url.hash.includes('tab=offerExtension') || url.hash.includes('tab=lease')) {
             const propertyId = url.hash.match(/ID=(\d+)/)?.[1];
             if (!propertyId) return;
 
-            console.log('Observing for offer submissions on property:', propertyId);
-
-            const daysLeft = getPropertyDaysLeft(propertyId);
-            console.log('Days left for property', propertyId, ':', daysLeft);
+            console.log('Auto-filling form for property:', propertyId);
 
             const observer = new MutationObserver((mutations, obs) => {
-                const nextButton = document.querySelector('input[type="submit"][value="NEXT"]');
                 const offerExtensionUl = document.querySelector('ul.offerExtension-input');
                 
                 if (offerExtensionUl) {
@@ -1071,37 +959,28 @@
                         // Only run if we haven't processed these inputs yet
                         if (!costLi.dataset.processed) {
                             setTimeout(() => {
-                                // Set the cost inputs - use more specific selector
+                                // Set the cost inputs
                                 const costInputs = costLi.querySelectorAll('input.offerExtension.input-money:not([data-processed])');
-                                console.log('Found cost inputs:', costInputs.length);
                                 costInputs.forEach(input => {
                                     if (!input.dataset.processed) {
-                                        console.log('Setting input value to:', defaultAmount);
                                         input.value = defaultAmount;
                                         input.dispatchEvent(new Event('input', { bubbles: true }));
                                         input.dispatchEvent(new Event('change', { bubbles: true }));
-                                        input.dispatchEvent(new Event('blur', { bubbles: true }));
-                                        input.dispatchEvent(new Event('focus', { bubbles: true }));
                                         input.dataset.processed = 'true';
                                     }
                                 });
 
-                                // Set the amount input - use more specific selector
+                                // Set the amount input
                                 const amountInput = amountLi.querySelector('input.input-money:not([data-processed])');
                                 if (amountInput && !amountInput.dataset.processed) {
-                                    console.log('Setting amount to', defaultPeriod, 'days');
                                     amountInput.value = defaultPeriod.toString();
                                     amountInput.dispatchEvent(new Event('input', { bubbles: true }));
                                     amountInput.dispatchEvent(new Event('change', { bubbles: true }));
-                                    amountInput.dispatchEvent(new Event('blur', { bubbles: true }));
-                                    amountInput.dispatchEvent(new Event('focus', { bubbles: true }));
                                     amountInput.dataset.processed = 'true';
                                 }
                                 
-                                // Mark the container as processed
                                 costLi.dataset.processed = 'true';
                                 
-                                // Only disconnect if both inputs are processed
                                 if (costLi.dataset.processed && amountInput?.dataset.processed) {
                                     observer.disconnect();
                                 }
@@ -1111,64 +990,12 @@
                         costLi.dataset.listenerAttached = 'true';
                     }
                 }
-                
-                if (nextButton && !nextButton.dataset.listenerAttached) {
-                    console.log('Found next button');
-                    nextButton.dataset.listenerAttached = 'true';
-                    nextButton.addEventListener('click', (event) => {
-                        console.log('Next button clicked - resolving current property data...');
-                        
-                        // Resolve propertyId and daysLeft fresh at click time
-                        const currentUrl = new URL(window.location.href);
-                        const currentPropertyId = currentUrl.hash.match(/ID=(\d+)/)?.[1];
-                        const currentDaysLeft = currentPropertyId ? getPropertyDaysLeft(currentPropertyId) : 0;
-                        
-                        console.log('Current property ID:', currentPropertyId);
-                        console.log('Current days left:', currentDaysLeft);
-                        
-                        if (currentPropertyId && currentDaysLeft > 0) {
-                            console.log('Storing offer with days left:', currentDaysLeft);
-                            localStorage.setItem(`property_offer_${currentPropertyId}`, currentDaysLeft.toString());
-                        } else {
-                            console.warn('Could not store offer - missing property ID or invalid days left');
-                        }
-                    }, { capture: true });
-                }
             });
 
             observer.observe(document.body, {
                 childList: true,
-                subtree: true,
-                attributes: true,
-                characterData: true
+                subtree: true
             });
-
-            // Add delegated event listener as fallback for DOM replacements
-            document.body.addEventListener('click', (event) => {
-                if (event.target && 
-                    event.target.type === 'submit' && 
-                    event.target.value === 'NEXT' &&
-                    !event.target.dataset.delegateHandled) {
-                    
-                    console.log('Delegated click handler triggered for NEXT button');
-                    event.target.dataset.delegateHandled = 'true';
-                    
-                    // Resolve propertyId and daysLeft fresh at click time
-                    const currentUrl = new URL(window.location.href);
-                    const currentPropertyId = currentUrl.hash.match(/ID=(\d+)/)?.[1];
-                    const currentDaysLeft = currentPropertyId ? getPropertyDaysLeft(currentPropertyId) : 0;
-                    
-                    console.log('Delegated - Current property ID:', currentPropertyId);
-                    console.log('Delegated - Current days left:', currentDaysLeft);
-                    
-                    if (currentPropertyId && currentDaysLeft > 0) {
-                        console.log('Delegated - Storing offer with days left:', currentDaysLeft);
-                        localStorage.setItem(`property_offer_${currentPropertyId}`, currentDaysLeft.toString());
-                    } else {
-                        console.warn('Delegated - Could not store offer - missing property ID or invalid days left');
-                    }
-                }
-            }, { capture: true });
         }
     }
 
