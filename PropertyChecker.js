@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      4.0.0
+// @version      4.0.2
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -65,6 +65,15 @@
                 grid: 'display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr);'
             }
         },
+        common: {
+            flexCenter: 'display: flex; justify-content: center; align-items: center;',
+            flexBetween: 'display: flex; justify-content: space-between; align-items: center;',
+            white: 'color: #fff;',
+            inputField: 'padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;',
+            marginBottom15: 'margin-bottom: 15px;',
+            textCenter: 'text-align: center;',
+            tableHeader: 'padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;'
+        },
         mobileTable: `
             @media screen and (max-width: 768px) {
                 table, thead, tbody, tr, th, td {
@@ -124,17 +133,12 @@
                 }
                 
                 td:nth-of-type(4)::before {
-                    content: "Daily Rent: $";
+                    content: "Daily Rent: ";
                     position: static;
                     width: auto;
                 }
 
-                /* Create a flex container for buttons */
-                tr {
-                    position: relative;
-                }
-
-                /* Button styling - only one button now */
+                /* Renew button styling */
                 td:nth-of-type(5) {
                     display: block;
                     width: 100%;
@@ -142,7 +146,6 @@
                     margin: 10px 0 0 0;
                 }
 
-                /* Button styling */
                 td:nth-of-type(5) a {
                     width: 100%;
                     padding: 10px !important;
@@ -154,7 +157,7 @@
                     justify-content: center;
                     margin: 0;
                     border-radius: 3px;
-                    min-height: 37px;  /* Set explicit height to match */
+                    min-height: 37px;
                     line-height: 1.2;
                 }
                 
@@ -182,25 +185,33 @@
         REFRESH_COOLDOWN: 60000, // 1 minute in milliseconds
         MAX_RETRIES: 30,
         RETRY_DELAY: 100,
-        API_ENDPOINT: 'https://api.torn.com/v2'
+        API_ENDPOINT: 'https://api.torn.com/v2',
+        API_BATCH_SIZE: 100,
+        MIN_API_KEY_LENGTH: 16,
+        MAX_RENTAL_PERIOD: 365,
+        MIN_RENTAL_PERIOD: 1,
+        OBSERVER_DELAY: 500,
+        WARNING_DAYS_THRESHOLD: 10
     };
 
-    // Cache DOM queries
-    const getElement = (selector) => document.querySelector(selector);
-    const createElement = (html) => {
-        const div = document.createElement('div');
-        div.innerHTML = html.trim();
-        return div.firstChild;
+    const STORAGE_KEYS = {
+        API_KEY: 'tornApiKey',
+        CURRENT_USER_ID: 'property_currentUserId',
+        HIDE_AVAILABLE: 'hideAvailableProperties',
+        DEFAULT_RENTAL_PERIOD: 'defaultRentalPeriod',
+        DEFAULT_RENTAL_AMOUNT: 'defaultRentalAmount',
+        PROPERTY_ID_LAST_FETCHED: 'propertyId_lastFetched'
     };
 
-    /**
-     * Handles API requests with error handling and rate limiting
-     * @param {string} endpoint - API endpoint
-     * @param {Object} options - Request options
-     * @returns {Promise} API response
-     */
+    const STATUS_DISPLAY = {
+        'rented': 'Rented',
+        'none': 'Empty',
+        'for_rent': 'For Rent'
+    };
 
 
+    // ==================== UTILITY FUNCTIONS ====================
+    
     /**
      * Debounces a function
      * @param {Function} func - Function to debounce
@@ -217,6 +228,57 @@
             timeout = setTimeout(later, wait);
         };
     }
+
+    /**
+     * Creates a statistics card element
+     */
+    function createStatsCard(label, className, prefix = '', suffix = '') {
+        return `
+            <div style="${STYLES.stats.card}">
+                <div style="${STYLES.stats.cardLabel}">${label}</div>
+                <div style="${STYLES.stats.cardValue}">
+                    ${prefix}<span class="${className}">-</span>${suffix}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Creates an input card element
+     */
+    function createInputCard(label, className, hasSearchButton = false, defaultValue = '') {
+        const inputStyle = hasSearchButton ? STYLES.stats.input.fieldLeft : STYLES.stats.input.fieldFull;
+        const valueAttr = defaultValue ? `value="${defaultValue}"` : '';
+        
+        // Add delete button for API key
+        const deleteButton = className === 'api-key-input' ? `
+            <button class="delete-api-key" 
+                    style="${STYLES.stats.input.button}; background: #662222; margin-left: 5px;" 
+                    title="Delete API Key">
+                🗑️
+            </button>
+        ` : '';
+        
+        return `
+            <div style="${STYLES.stats.card}">
+                <div style="${STYLES.stats.cardLabel}">${label}</div>
+                <div style="${STYLES.stats.input.container}">
+                    <input type="${className === 'api-key-input' ? 'text' : 'number'}" class="${className}" 
+                        style="${STYLES.stats.input.field} ${inputStyle}"
+                        placeholder="Enter ${label.toLowerCase()}"
+                        ${valueAttr}>
+                    ${hasSearchButton ? `
+                        <a href="https://www.torn.com/properties.php?step=sellingmarket#/property=13" 
+                           target="_blank" 
+                           style="${STYLES.stats.input.button}">🔍</a>
+                    ` : ''}
+                    ${deleteButton}
+                </div>
+            </div>
+        `;
+    }
+
+    // ==================== CORE FUNCTIONS ===================="
 
 
     // Optimize observers with weak references
@@ -257,15 +319,6 @@
         });
     }
 
-    /**
-     * Creates a styled button element
-     * @param {string} text - Button text
-     * @param {string} id - Button ID
-     * @returns {string} HTML button string
-     */
-/*     function createButton(text, id) {
-        return `<button id="${id}" style="${STYLES.button}">${text}</button>`;
-    } */
 
     /**
      * Determines the background color for a property row
@@ -280,8 +333,8 @@
         // Red: Status is "none" with empty used_by (unused empty property)
         if (property.status === "none" && property.usedBy.length === 0) return STYLES.statusColors.expired;
         
-        // Orange: No lease extension but lease has 10 or fewer days remaining
-        if ((property.lease_extension === null || property.lease_extension === undefined) && property.daysLeft <= 10 && property.daysLeft > 0) return STYLES.statusColors.warning;
+        // Orange: No lease extension but lease has few days remaining
+        if ((property.lease_extension === null || property.lease_extension === undefined) && property.daysLeft <= CONFIG.WARNING_DAYS_THRESHOLD && property.daysLeft > 0) return STYLES.statusColors.warning;
         
         return '';
     }
@@ -289,15 +342,15 @@
     function createApiKeyForm(isIncorrectKey = false) {
         return `
             <div class="properties-container" style="${STYLES.container}">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h2 style="color: #fff; margin: 0;">Properties Manager</h2>
+                <div style="${STYLES.common.flexBetween}; ${STYLES.common.marginBottom15}">
+                    <h2 style="${STYLES.common.white}; margin: 0;">Properties Manager</h2>
                 </div>
-                <div style="text-align: center;">
+                <div style="${STYLES.common.textCenter}">
                     ${isIncorrectKey ? 
                         `<p style="color: #ff6666; margin-bottom: 15px;">Incorrect API Key detected. Please enter a new one:</p>` :
                         `<p style="color: #fff; margin-bottom: 15px;">Please enter your Torn API key to continue:</p>`
                     }
-                    <input type="text" id="torn-api-key" style="padding: 5px; margin-right: 10px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px;">
+                    <input type="text" id="torn-api-key" style="${STYLES.common.inputField}; margin-right: 10px;">
                     <button id="submit-api-key" style="${STYLES.button}">Submit</button>
                 </div>
             </div>`;
@@ -309,7 +362,7 @@
         existingContainers.forEach(container => container.remove());
 
         // Check for API key first
-        const apiKey = localStorage.getItem('tornApiKey');
+        const apiKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
         const targetElement = document.querySelector('#properties-page-wrap');
         
         // Wait for target element to exist with a maximum number of retries
@@ -334,15 +387,34 @@
         if (!apiKey && targetElement) {
             targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm());
 
-            // Add API key submission handler
-            document.getElementById('submit-api-key').addEventListener('click', function() {
-                const apiKeyInput = document.getElementById('torn-api-key');
-                if (apiKeyInput.value) {
-                    localStorage.setItem('tornApiKey', apiKeyInput.value);
-                    document.querySelector('.properties-container').remove();
-                    createPropertiesTable();
+            // Add API key submission handler after a small delay to ensure DOM is ready
+            setTimeout(() => {
+                const submitButton = document.getElementById('submit-api-key');
+                if (submitButton) {
+                    submitButton.addEventListener('click', function() {
+                        const apiKeyInput = document.getElementById('torn-api-key');
+                        const apiKey = apiKeyInput.value.trim();
+                        
+                        if (!apiKey) {
+                            alert('Please enter an API key');
+                            return;
+                        }
+                        
+                        if (apiKey.length < CONFIG.MIN_API_KEY_LENGTH || !/^[a-zA-Z0-9]+$/.test(apiKey)) {
+                            alert(`API Key must be at least ${CONFIG.MIN_API_KEY_LENGTH} characters and contain only letters and numbers`);
+                            return;
+                        }
+                        
+                        try {
+                            localStorage.setItem(STORAGE_KEYS.API_KEY, apiKey);
+                            document.querySelector('.properties-container').remove();
+                            createPropertiesTable();
+                        } catch (error) {
+                            alert('Error saving API key: ' + error.message);
+                        }
+                    });
                 }
-            });
+            }, 0);
 
             return;
         }
@@ -350,10 +422,10 @@
         const tableHTML = `
             <style>${STYLES.mobileTable}</style>
             <div class="properties-container" style="${STYLES.container}">
-                <div class="properties-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h2 style="color: #fff; margin: 0; cursor: pointer;">Properties Manager</h2>
+                <div class="properties-header" style="${STYLES.common.flexBetween}; ${STYLES.common.marginBottom15}">
+                    <h2 style="${STYLES.common.white}; margin: 0; cursor: pointer;">Properties Manager</h2>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span class="collapse-icon" style="color: #fff; font-size: 20px; cursor: pointer;">▶</span>
+                        <span class="collapse-icon" style="${STYLES.common.white}; font-size: 20px; cursor: pointer;">▶</span>
                     </div>
                 </div>
                 <div class="properties-content" style="display: none;">
@@ -378,11 +450,11 @@
                             <thead>
                                 <tr>
                                     <th style="display: none;">Property ID</th>
-                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Property Name</th>
-                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Status</th>
-                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Days Left</th>
-                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Daily Rent</th>
-                                    <th style="padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;">Renew</th>
+                                    <th style="${STYLES.common.tableHeader}">Property Name</th>
+                                    <th style="${STYLES.common.tableHeader}">Status</th>
+                                    <th style="${STYLES.common.tableHeader}">Days Left</th>
+                                    <th style="${STYLES.common.tableHeader}">Daily Rent</th>
+                                    <th style="${STYLES.common.tableHeader}">Renew</th>
                                 </tr>
                             </thead>
                             <tbody id="properties-table-body">
@@ -460,15 +532,34 @@
             if (targetElement) {
                 targetElement.insertAdjacentHTML('afterbegin', createApiKeyForm(true));
                 
-                // Add API key submission handler
-                document.getElementById('submit-api-key').addEventListener('click', function() {
-                    const apiKeyInput = document.getElementById('torn-api-key');
-                    if (apiKeyInput.value) {
-                        localStorage.setItem('tornApiKey', apiKeyInput.value);
-                        document.querySelector('.properties-container').remove();
-                        createPropertiesTable();
+                // Add API key submission handler after a small delay to ensure DOM is ready
+                setTimeout(() => {
+                    const submitButton = document.getElementById('submit-api-key');
+                    if (submitButton) {
+                        submitButton.addEventListener('click', function() {
+                            const apiKeyInput = document.getElementById('torn-api-key');
+                            const apiKey = apiKeyInput.value.trim();
+                            
+                            if (!apiKey) {
+                                alert('Please enter an API key');
+                                return;
+                            }
+                            
+                            if (apiKey.length < CONFIG.MIN_API_KEY_LENGTH || !/^[a-zA-Z0-9]+$/.test(apiKey)) {
+                                alert(`API Key must be at least ${CONFIG.MIN_API_KEY_LENGTH} characters and contain only letters and numbers`);
+                                return;
+                            }
+                            
+                            try {
+                                localStorage.setItem(STORAGE_KEYS.API_KEY, apiKey);
+                                document.querySelector('.properties-container').remove();
+                                createPropertiesTable();
+                            } catch (error) {
+                                alert('Error saving API key: ' + error.message);
+                            }
+                        });
                     }
-                });
+                }, 0);
             }
         } else {
             // Handle other errors with alert
@@ -482,7 +573,7 @@
     async function getAllProperties(apiKey) {
         let allProperties = [];
         let offset = 0;
-        let batchSize = 100;
+        let batchSize = CONFIG.API_BATCH_SIZE;
         let hasMore = true;
 
         while (hasMore) {
@@ -568,7 +659,10 @@
         const totalPages = Math.ceil(properties.length / itemsPerPage);
         
         // Add statistics section after pagination
-        const statsSection = document.querySelector('.stats-section') || createElement(`
+        let statsSection = document.querySelector('.stats-section');
+        if (!statsSection) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = `
             <div class="stats-section" style="${STYLES.stats.section}">
                 <style>
                     @media (max-width: 768px) {
@@ -645,7 +739,9 @@
                     </div>
                 </div>
             </div>
-        `);
+        `.trim();
+            statsSection = tempDiv.firstElementChild;
+        }
 
         // Add stats section if it doesn't exist AND if pagination exists
         const paginationElement = document.querySelector('.pagination');
@@ -708,23 +804,21 @@
             annualRevenueElement.textContent = annualRevenue.toLocaleString();
         }
 
-        // Function to update filter labels with counts
-        function updateFilterLabels(properties) {
+        // Initialize filter functionality
+        function initializeFilters(properties) {
             const availableCount = properties.filter(prop => prop.status === "Available").length;
-            
             const hideAvailableLabel = document.getElementById('hide-available').parentElement;
             
+            // Update labels with counts
             hideAvailableLabel.innerHTML = `
                 <input type="checkbox" id="hide-available" style="cursor: pointer;">
                 Hide Available (${availableCount})
             `;
             
-            // Restore checkbox state
+            // Restore checkbox state and attach event listener
             const newAvailableCheckbox = document.getElementById('hide-available');
-            
             newAvailableCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
             
-            // Re-attach event listener
             newAvailableCheckbox.addEventListener('change', () => {
                 localStorage.setItem('hideAvailableProperties', newAvailableCheckbox.checked);
                 currentPage = 1;
@@ -732,29 +826,8 @@
             });
         }
 
-        // Add filter functionality
-        const hideAvailable = document.getElementById('hide-available');
-        const hideAvailableLabel = hideAvailable.parentElement;
-        
-        // Calculate counts
-        const availableCount = properties.filter(prop => prop.status === "Available").length;
-        
-        // Update labels with counts
-        hideAvailableLabel.innerHTML = `
-            <input type="checkbox" id="hide-available" style="cursor: pointer;">
-            Hide Available (${availableCount})
-        `;
-        
-        // Restore checkbox state
-        const newAvailableCheckbox = document.getElementById('hide-available');
-        newAvailableCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
-        
-        // Attach event listener
-        newAvailableCheckbox.addEventListener('change', () => {
-            localStorage.setItem('hideAvailableProperties', newAvailableCheckbox.checked);
-            currentPage = 1;
-            displayPage(currentPage);
-        });
+        // Initialize filters
+        initializeFilters(properties);
 
         function getFilteredProperties() {
             const searchId = document.getElementById('player-id-search')?.value.trim();
@@ -792,12 +865,8 @@
                 let displayStatus = prop.status;
                 if (prop.lease_extension && prop.lease_extension.period) {
                     displayStatus = `Lease Offered (${prop.lease_extension.period} days)`;
-                } else if (prop.status === "for_rent") {
-                    displayStatus = "For Rent";
-                } else if (prop.status === "rented") {
-                    displayStatus = "Rented";
-                } else if (prop.status === "none") {
-                    displayStatus = "Empty";
+                } else if (STATUS_DISPLAY[prop.status]) {
+                    displayStatus = STATUS_DISPLAY[prop.status];
                 }
                 const baseColor = getPropertyRowColor(prop);
                 
@@ -902,29 +971,52 @@
             }
 
             saveSettingsBtn.addEventListener('click', () => {
-                const apiKey = statsSection.querySelector('.api-key-input').value;
-                const rentalPeriod = statsSection.querySelector('.default-rental-period').value;
-                const defaultRentalAmount = statsSection.querySelector('.default-rental-amount').value;
+                const apiKey = statsSection.querySelector('.api-key-input').value.trim();
+                const rentalPeriod = statsSection.querySelector('.default-rental-period').value.trim();
+                const defaultRentalAmount = statsSection.querySelector('.default-rental-amount').value.trim();
 
+                // Validate inputs
+                const errors = [];
                 
-                if (apiKey) {
-                    localStorage.setItem('tornApiKey', apiKey);
+                if (apiKey && (apiKey.length < CONFIG.MIN_API_KEY_LENGTH || !/^[a-zA-Z0-9]+$/.test(apiKey))) {
+                    errors.push(`API Key must be at least ${CONFIG.MIN_API_KEY_LENGTH} characters and contain only letters and numbers`);
                 }
                 
-                if (rentalPeriod) {
-                    localStorage.setItem('defaultRentalPeriod', rentalPeriod);
+                if (rentalPeriod && (isNaN(rentalPeriod) || parseInt(rentalPeriod) < CONFIG.MIN_RENTAL_PERIOD || parseInt(rentalPeriod) > CONFIG.MAX_RENTAL_PERIOD)) {
+                    errors.push(`Rental Period must be a number between ${CONFIG.MIN_RENTAL_PERIOD} and ${CONFIG.MAX_RENTAL_PERIOD} days`);
+                }
+                
+                if (defaultRentalAmount && (isNaN(defaultRentalAmount) || parseInt(defaultRentalAmount) < 1)) {
+                    errors.push('Rental Amount must be a positive number');
+                }
+                
+                if (errors.length > 0) {
+                    alert('Validation errors:\\n' + errors.join('\\n'));
+                    return;
                 }
 
-                if (defaultRentalAmount) {
-                    localStorage.setItem('defaultRentalAmount', defaultRentalAmount);
-                }
-                
-                // Show success message
-                alert('Settings saved successfully!');
-                
-                // Refresh the page to apply new API key if it changed
-                if (apiKey !== "" && apiKey !== localStorage.getItem('tornApiKey')) {
-                    location.reload();
+                // Save valid values
+                try {
+                    if (apiKey) {
+                        localStorage.setItem('tornApiKey', apiKey);
+                    }
+                    
+                    if (rentalPeriod) {
+                        localStorage.setItem('defaultRentalPeriod', rentalPeriod);
+                    }
+
+                    if (defaultRentalAmount) {
+                        localStorage.setItem('defaultRentalAmount', defaultRentalAmount);
+                    }
+                    
+                    alert('Settings saved successfully!');
+                    
+                    // Refresh if API key changed
+                    if (apiKey && apiKey !== localStorage.getItem('tornApiKey')) {
+                        location.reload();
+                    }
+                } catch (error) {
+                    alert('Error saving settings: ' + error.message);
                 }
             });
         }
@@ -1005,7 +1097,7 @@
         
         const checkForElement = setInterval(() => {
             attempts++;
-            const targetElement = getElement('#properties-page-wrap');
+            const targetElement = document.querySelector('#properties-page-wrap');
             
             if (targetElement) {
                 clearInterval(checkForElement);
@@ -1022,17 +1114,6 @@
 
     // Listen for URL changes (for single-page app navigation)
     window.addEventListener('hashchange', observeOfferSubmissions);
-
-    function createStatsCard(label, className, prefix = '', suffix = '') {
-        return `
-            <div style="${STYLES.stats.card}">
-                <div style="${STYLES.stats.cardLabel}">${label}</div>
-                <div style="${STYLES.stats.cardValue}">
-                    ${prefix}<span class="${className}">-</span>${suffix}
-                </div>
-            </div>
-        `;
-    }
 
     function getUserId() {
         const apiKey = localStorage.getItem('tornApiKey');
@@ -1056,37 +1137,5 @@
                 return data.player_id;
             })
             .catch(handleApiError);
-    }
-
-    function createInputCard(label, className, hasSearchButton = false, defaultValue = '') {
-        const inputStyle = hasSearchButton ? STYLES.stats.input.fieldLeft : STYLES.stats.input.fieldFull;
-        const valueAttr = defaultValue ? `value="${defaultValue}"` : '';
-        
-        // Add delete button for API key
-        const deleteButton = className === 'api-key-input' ? `
-            <button class="delete-api-key" 
-                    style="${STYLES.stats.input.button}; background: #662222; margin-left: 5px;" 
-                    title="Delete API Key">
-                🗑️
-            </button>
-        ` : '';
-        
-        return `
-            <div style="${STYLES.stats.card}">
-                <div style="${STYLES.stats.cardLabel}">${label}</div>
-                <div style="${STYLES.stats.input.container}">
-                    <input type="${className === 'api-key-input' ? 'text' : 'number'}" class="${className}" 
-                        style="${STYLES.stats.input.field} ${inputStyle}"
-                        placeholder="Enter ${label.toLowerCase()}"
-                        ${valueAttr}>
-                    ${hasSearchButton ? `
-                        <a href="https://www.torn.com/properties.php?step=sellingmarket#/property=13" 
-                           target="_blank" 
-                           style="${STYLES.stats.input.button}">🔍</a>
-                    ` : ''}
-                    ${deleteButton}
-                </div>
-            </div>
-        `;
     }
 })();
