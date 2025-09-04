@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      4.0.2
+// @version      4.0.3
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -198,6 +198,7 @@
         API_KEY: 'tornApiKey',
         CURRENT_USER_ID: 'property_currentUserId',
         HIDE_AVAILABLE: 'hideAvailableProperties',
+        HIDE_OFFERED: 'hideOfferedProperties',
         DEFAULT_RENTAL_PERIOD: 'defaultRentalPeriod',
         DEFAULT_RENTAL_AMOUNT: 'defaultRentalAmount',
         PROPERTY_ID_LAST_FETCHED: 'propertyId_lastFetched'
@@ -441,6 +442,10 @@
                             <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
                                 <input type="checkbox" id="hide-available" style="cursor: pointer;">
                                 Hide Available
+                            </label>
+                            <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
+                                <input type="checkbox" id="hide-offered" style="cursor: pointer;">
+                                Hide Offered
                             </label>
                             <button id="refresh-properties" style="${STYLES.button}">Refresh</button>
                         </div>
@@ -807,7 +812,9 @@
         // Initialize filter functionality
         function initializeFilters(properties) {
             const availableCount = properties.filter(prop => prop.status === "Available").length;
+            const offeredCount = properties.filter(prop => prop.lease_extension !== null && prop.lease_extension !== undefined).length;
             const hideAvailableLabel = document.getElementById('hide-available').parentElement;
+            const hideOfferedLabel = document.getElementById('hide-offered').parentElement;
             
             // Update labels with counts
             hideAvailableLabel.innerHTML = `
@@ -815,12 +822,26 @@
                 Hide Available (${availableCount})
             `;
             
-            // Restore checkbox state and attach event listener
+            hideOfferedLabel.innerHTML = `
+                <input type="checkbox" id="hide-offered" style="cursor: pointer;">
+                Hide Offered (${offeredCount})
+            `;
+            
+            // Restore checkbox states and attach event listeners
             const newAvailableCheckbox = document.getElementById('hide-available');
+            const newOfferedCheckbox = document.getElementById('hide-offered');
+            
             newAvailableCheckbox.checked = localStorage.getItem('hideAvailableProperties') === 'true';
+            newOfferedCheckbox.checked = localStorage.getItem('hideOfferedProperties') === 'true';
             
             newAvailableCheckbox.addEventListener('change', () => {
                 localStorage.setItem('hideAvailableProperties', newAvailableCheckbox.checked);
+                currentPage = 1;
+                displayPage(currentPage);
+            });
+            
+            newOfferedCheckbox.addEventListener('change', () => {
+                localStorage.setItem('hideOfferedProperties', newOfferedCheckbox.checked);
                 currentPage = 1;
                 displayPage(currentPage);
             });
@@ -833,11 +854,16 @@
             const searchId = document.getElementById('player-id-search')?.value.trim();
             let filtered = [...properties]; // Create a copy of the properties array
             
-            // Get current checkbox state directly from the element
+            // Get current checkbox states directly from the elements
             const hideAvailable = document.getElementById('hide-available')?.checked;
+            const hideOffered = document.getElementById('hide-offered')?.checked;
             
             if (hideAvailable) {
                 filtered = filtered.filter(prop => prop.status !== "Available");
+            }
+            
+            if (hideOffered) {
+                filtered = filtered.filter(prop => !(prop.lease_extension !== null && prop.lease_extension !== undefined));
             }
             
             if (searchId) {
