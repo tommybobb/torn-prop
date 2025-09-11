@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      4.0.4
+// @version      4.0.5
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -334,12 +334,12 @@
      * @returns {string} CSS background-color value
      */
     function getPropertyRowColor(property) {
-        // Green: Has lease extension OR is for_rent status with empty used_by
+        // Green: Has lease extension OR is for_rent status with no renter
         if (property.lease_extension !== null && property.lease_extension !== undefined) return STYLES.statusColors.offered;
-        if (property.status === "for_rent" && property.usedBy.length === 0) return STYLES.statusColors.offered;
+        if (property.status === "for_rent" && !property.rented_by) return STYLES.statusColors.offered;
         
-        // Red: Status is "none" with empty used_by (unused empty property)
-        if (property.status === "none" && property.usedBy.length === 0) return STYLES.statusColors.expired;
+        // Red: Status is "none" with no renter (unused empty property)
+        if (property.status === "none" && !property.rented_by) return STYLES.statusColors.expired;
         
         // Orange: No lease extension but lease has few days remaining
         if ((property.lease_extension === null || property.lease_extension === undefined) && property.daysLeft <= CONFIG.WARNING_DAYS_THRESHOLD && property.daysLeft > 0) return STYLES.statusColors.warning;
@@ -441,7 +441,7 @@
                         <div style="display: flex; align-items: center; gap: 10px; flex: 0 1 auto; max-width: 200px; width: 100%;">
                             <input type="text" 
                                    id="player-id-search" 
-                                   placeholder="Search by Player ID" 
+                                   placeholder="Search ID or Name" 
                                    style="padding: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 3px; width: calc(100% - 70px);">
                             <button id="clear-search" style="${STYLES.button}">Clear</button>
                         </div>
@@ -646,8 +646,7 @@
                     lease_extension: prop.lease_extension,
                     costPerDay: prop.status == "rented" ? prop.cost_per_day : 0,
                     buttonValue: prop.status == "rented" ? "Renew" : "Lease",
-                    rentedBy: prop.status == "rented" ? prop.used_by.id : null,
-                    usedBy: prop.used_by || []
+                    rented_by: prop.status == "rented" ? prop.rented_by : null
                 }));
 
             console.log('Properties after filtering:', properties.length);
@@ -880,7 +879,10 @@
             
             if (searchId) {
                 filtered = filtered.filter(prop => 
-                    prop.rentedBy && prop.rentedBy.toString() === searchId
+                    prop.rented_by && (
+                        prop.rented_by.id && prop.rented_by.id.toString() === searchId ||
+                        prop.rented_by.name && prop.rented_by.name.toLowerCase().includes(searchId.toLowerCase())
+                    )
                 );
             }
             
