@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      4.0.3
+// @version      4.0.4
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
 // @grant        none
 // @run-at       document-start
+// @license         MIT
 // @downloadURL https://update.greasyfork.org/scripts/522408/Torn%20Properties%20Manager.user.js
 // @updateURL https://update.greasyfork.org/scripts/522408/Torn%20Properties%20Manager.meta.js
 // ==/UserScript==
@@ -293,7 +294,10 @@
                 // If our container is gone but we're still on the properties page, recreate it
                 if (!propertiesContainer && propertiesPageWrap) {
                     createPropertiesTable();
-                    getUserId();
+                    // Pre-fetch user ID to cache it for later use
+                    getUserId().catch(error => {
+                        console.error('Failed to cache user ID:', error);
+                    });
                     observeOfferSubmissions();
                 }
             }, 100)
@@ -313,7 +317,10 @@
                 
                 if (!propertiesContainer && propertiesPageWrap) {
                     createPropertiesTable();    
-                    getUserId();
+                    // Pre-fetch user ID to cache it for later use
+                    getUserId().catch(error => {
+                        console.error('Failed to cache user ID:', error);
+                    });
                     observeOfferSubmissions();
                 }
             }, 100); // Small delay to let React render
@@ -487,24 +494,24 @@
             let dataFetched = false;
             let lastRefreshTime = 0;
             
-            header.addEventListener('click', () => {
+            header.addEventListener('click', async () => {
                 const isVisible = content.style.display !== 'none';
                 content.style.display = isVisible ? 'none' : 'block';
                 icon.textContent = isVisible ? '▶' : '▼';
                 
                 // Only fetch data the first time we expand
                 if (!isVisible && !dataFetched) {
-                    getPropertyData();
+                    await getPropertyData();
                     dataFetched = true;
                 }
             });
 
-            refreshButton.addEventListener('click', () => {
+            refreshButton.addEventListener('click', async () => {
                 const currentTime = Date.now();
                 const timeSinceLastRefresh = currentTime - lastRefreshTime;
                 
                 if (timeSinceLastRefresh >= 60000) { // 60000ms = 1 minute
-                    getPropertyData();
+                    await getPropertyData();
                     lastRefreshTime = currentTime;
                 } else {
                     const secondsRemaining = Math.ceil((60000 - timeSinceLastRefresh) / 1000);
@@ -607,13 +614,18 @@
 
     async function getPropertyData() {
         const apiKey = localStorage.getItem('tornApiKey');
-        const currentUserId = localStorage.getItem('property_currentUserId');
-
-        console.log("currentUserId: " + currentUserId);
 
         if (!apiKey) return;
 
         try {
+            // Ensure we have the current user ID before proceeding
+            const currentUserId = await getUserId();
+
+            if (!currentUserId) {
+                console.error('Failed to get current user ID');
+                return;
+            }
+
             const allProperties = await getAllProperties(apiKey);
 
             // No localStorage cleanup needed - using API lease_extension data
@@ -1128,7 +1140,10 @@
             if (targetElement) {
                 clearInterval(checkForElement);
                 createPropertiesTable();
-                getUserId();
+                // Pre-fetch user ID to cache it for later use
+                getUserId().catch(error => {
+                    console.error('Failed to cache user ID:', error);
+                });
                 observeOfferSubmissions();
                 setupNavigationObserver();
             } else if (attempts >= CONFIG.MAX_RETRIES) {
@@ -1143,7 +1158,7 @@
 
     function getUserId() {
         const apiKey = localStorage.getItem('tornApiKey');
-        if (!apiKey) return;
+        if (!apiKey) return Promise.resolve(null);
 
         // Only fetch once per minute (60000 milliseconds)
         const now = Date.now();
@@ -1158,10 +1173,13 @@
                 if (data.error) {
                     throw new Error(`API Error: ${data.error.error}`);
                 }
-                localStorage.setItem('property_currentUserId', data.player_id);
+                localStorage.setItem('property_currentUserId', data.profile.id);
                 localStorage.setItem('propertyId_lastFetched', now.toString());
-                return data.player_id;
+                return data.profile.id;
             })
-            .catch(handleApiError);
+            .catch(error => {
+                handleApiError(error);
+                return null;
+            });
     }
 })();
