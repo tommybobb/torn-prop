@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      4.0.5
+// @version      4.1.2
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -75,79 +75,80 @@
             textCenter: 'text-align: center;',
             tableHeader: 'padding: 16px 8px; text-align: left; border-bottom: 1px solid #444; font-weight: bold;'
         },
+        marketBar: {
+            bar: 'margin: 10px 16px; padding: 12px 14px; background: #1e2a1e; border: 1px solid #3a5a3a; border-radius: 6px; color: #fff;',
+            title: 'font-size: 0.85em; color: #aaa; margin-bottom: 6px;',
+            rate: 'font-size: 1.15em; font-weight: bold; color: #7ecf7e; margin-bottom: 8px;',
+            useBtn: 'background: #2d5a2d; color: #fff; border: 1px solid #4a8a4a; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-size: 0.9em;',
+            warning: 'margin-top: 8px; font-size: 0.82em; color: #c8a040; padding: 6px 8px; background: rgba(200,160,64,0.1); border-radius: 4px;',
+            warningLink: 'color: #d4a84b; text-decoration: underline; margin-left: 4px;'
+        },
         mobileTable: `
             @media screen and (max-width: 768px) {
-                table, thead, tbody, tr, th, td {
+                table, thead, tbody, th, td {
                     display: block;
                 }
-                
+
                 thead tr {
                     position: absolute;
                     top: -9999px;
                     left: -9999px;
                 }
-                
+
                 tr {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 6px 12px;
                     margin-bottom: 15px;
                     background: rgba(0,0,0,0.2);
                     border-radius: 5px;
                     padding: 10px;
                 }
-                
+
                 td {
-                    position: relative;
-                    padding-left: 50% !important;
                     border-bottom: none !important;
+                    padding: 2px 0 !important;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
                 }
 
-                /* Special handling for property name, status, and days left */
-                td:nth-of-type(1),
-                td:nth-of-type(2),
-                td:nth-of-type(3) {
-                    display: inline-block;
-                    padding-left: 0 !important;
-                    width: auto;
-                }
-
-                td:nth-of-type(1)::after {
-                    content: " - ";
-                    margin: 0 5px;
-                }
-
-                td:nth-of-type(2)::after {
-                    content: " - ";
-                    margin: 0 5px;
-                }
-
-                td:nth-of-type(3) {
-                    padding-left: 0 !important;
-                }
-
-                td:nth-of-type(3)::after {
-                    content: " days left";
-                }
-
-                /* Daily Rent styling */
-                td:nth-of-type(4) {
-                    margin: 10px 0;
-                    padding-left: 0 !important;
-                }
-                
-                td:nth-of-type(4)::before {
-                    content: "Daily Rent: ";
-                    position: static;
-                    width: auto;
-                }
-
-                /* Renew button styling */
-                td:nth-of-type(5) {
+                td::before {
                     display: block;
-                    width: 100%;
-                    padding: 0 !important;
-                    margin: 10px 0 0 0;
+                    font-size: 0.75em;
+                    color: #aaa;
+                    margin-bottom: 1px;
                 }
 
-                td:nth-of-type(5) a {
+                /* Property Name - spans full width */
+                td:nth-of-type(1) {
+                    grid-column: 1 / -1;
+                    font-weight: bold;
+                    font-size: 1.05em;
+                    max-width: 100%;
+                }
+
+                /* Status */
+                td:nth-of-type(2)::before { content: "Status"; }
+
+                /* Rented By */
+                td:nth-of-type(3)::before { content: "Rented By"; }
+
+                /* Days Left */
+                td:nth-of-type(4)::before { content: "Days Left"; }
+
+                /* Daily Rent */
+                td:nth-of-type(5)::before { content: "Daily Rent"; }
+
+                /* Renew button - spans full width */
+                td:nth-of-type(6) {
+                    grid-column: 1 / -1;
+                    padding: 0 !important;
+                    margin-top: 4px;
+                    white-space: normal;
+                }
+
+                td:nth-of-type(6) a {
                     width: 100%;
                     padding: 10px !important;
                     text-align: center;
@@ -161,18 +162,18 @@
                     min-height: 37px;
                     line-height: 1.2;
                 }
-                
+
                 /* Adjust filter section */
                 .filter-section {
                     flex-direction: column;
                     gap: 10px;
                 }
-                
+
                 .filter-section > div {
                     width: 100% !important;
                     max-width: 100% !important;
                 }
-                
+
                 /* Adjust pagination */
                 .page-info-row {
                     margin: 15px 0;
@@ -192,7 +193,10 @@
         MAX_RENTAL_PERIOD: 365,
         MIN_RENTAL_PERIOD: 1,
         OBSERVER_DELAY: 500,
-        WARNING_DAYS_THRESHOLD: 10
+        WARNING_DAYS_THRESHOLD: 10,
+        RENTAL_MARKET_CACHE_DURATION: 30 * 60 * 1000,
+        PRIVATE_ISLAND_TYPE: 13,
+        MAX_HAPPINESS: 4225
     };
 
     const STORAGE_KEYS = {
@@ -202,7 +206,9 @@
         HIDE_OFFERED: 'hideOfferedProperties',
         DEFAULT_RENTAL_PERIOD: 'defaultRentalPeriod',
         DEFAULT_RENTAL_AMOUNT: 'defaultRentalAmount',
-        PROPERTY_ID_LAST_FETCHED: 'propertyId_lastFetched'
+        PROPERTY_ID_LAST_FETCHED: 'propertyId_lastFetched',
+        RENTAL_MARKET_CACHE: 'rentalMarketCache_13',
+        RENTAL_MARKET_CACHE_TIME: 'rentalMarketCacheTime_13'
     };
 
     const STATUS_DISPLAY = {
@@ -462,8 +468,9 @@
                             <thead>
                                 <tr>
                                     <th style="display: none;">Property ID</th>
-                                    <th style="${STYLES.common.tableHeader}">Property Name</th>
+                                    <th style="${STYLES.common.tableHeader}; max-width: 120px; width: 120px;">Property Name</th>
                                     <th style="${STYLES.common.tableHeader}">Status</th>
+                                    <th style="${STYLES.common.tableHeader}">Rented By</th>
                                     <th style="${STYLES.common.tableHeader}">Days Left</th>
                                     <th style="${STYLES.common.tableHeader}">Daily Rent</th>
                                     <th style="${STYLES.common.tableHeader}">Renew</th>
@@ -904,7 +911,7 @@
                 // Determine display status based on lease extension
                 let displayStatus = prop.status;
                 if (prop.lease_extension && prop.lease_extension.period) {
-                    displayStatus = `Lease Offered (${prop.lease_extension.period} days)`;
+                    displayStatus = `Offered`;
                 } else if (STATUS_DISPLAY[prop.status]) {
                     displayStatus = STATUS_DISPLAY[prop.status];
                 }
@@ -922,8 +929,9 @@
                 });
 
                 row.innerHTML = `
-                    <td style="${STYLES.tableCell}">${prop.name}</td>
+                    <td style="${STYLES.tableCell}; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${prop.name}">${prop.name}</td>
                     <td style="${STYLES.tableCell}">${displayStatus}</td>
+                    <td style="${STYLES.tableCell}">${prop.rented_by ? `<a href="https://www.torn.com/profiles.php?XID=${prop.rented_by.id}" target="_blank" style="color: #e8d5a3; text-decoration: none;">${prop.rented_by.name}</a>` : '-'}</td>
                     <td style="${STYLES.tableCell}">${prop.daysLeft}</td>
                     <td style="${STYLES.tableCell}">$${prop.costPerDay.toLocaleString()}</td>
                     <td style="${STYLES.tableCell}">
@@ -1065,6 +1073,94 @@
     }
 
 
+    async function fetchPrivateIslandRates() {
+        const cached = localStorage.getItem(STORAGE_KEYS.RENTAL_MARKET_CACHE);
+        const cachedTime = localStorage.getItem(STORAGE_KEYS.RENTAL_MARKET_CACHE_TIME);
+        if (cached && cachedTime && (Date.now() - parseInt(cachedTime)) < CONFIG.RENTAL_MARKET_CACHE_DURATION) {
+            console.log('Torn Props: Using cached rental market data', JSON.parse(cached));
+            return JSON.parse(cached);
+        }
+
+        const apiKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
+        if (!apiKey) {
+            console.warn('Torn Props: No API key found, skipping market rate fetch');
+            return null;
+        }
+
+        try {
+            console.log('Torn Props: Fetching Private Island rental market data...');
+            const response = await fetch(`${CONFIG.API_ENDPOINT}/market/${CONFIG.PRIVATE_ISLAND_TYPE}/rentals?offset=0`, {
+                headers: { 'Authorization': `ApiKey ${apiKey}` }
+            });
+            const data = await response.json();
+            console.log('Torn Props: Raw API response:', data);
+
+            if (data.error) { console.warn('Torn Props: API error:', data.error); return null; }
+            if (!data.rentals) { console.warn('Torn Props: No rentals field in response'); return null; }
+
+            const rentals = Object.values(data.rentals).flat();
+            console.log('Torn Props: Total rentals returned:', rentals.length, '| Sample:', rentals[0]);
+
+            if (rentals.length === 0) return null;
+            const allMaxHappiness = rentals.every(r => r.happy === CONFIG.MAX_HAPPINESS);
+            const maxHappinessRentals = rentals.filter(r => r.happy === CONFIG.MAX_HAPPINESS);
+            console.log(`Torn Props: Max happiness (${CONFIG.MAX_HAPPINESS}) listings: ${maxHappinessRentals.length} / ${rentals.length} | allMaxHappiness: ${allMaxHappiness}`);
+
+            if (maxHappinessRentals.length === 0) { console.warn('Torn Props: No max happiness listings found'); return null; }
+
+            const lowestRate = Math.min(...maxHappinessRentals.map(r => r.cost_per_day));
+            console.log('Torn Props: Lowest rate found:', lowestRate);
+            const result = { lowestRate, allMaxHappiness, cachedAt: Date.now() };
+            localStorage.setItem(STORAGE_KEYS.RENTAL_MARKET_CACHE, JSON.stringify(result));
+            localStorage.setItem(STORAGE_KEYS.RENTAL_MARKET_CACHE_TIME, Date.now().toString());
+            return result;
+        } catch (e) {
+            console.error('Torn Props: Failed to fetch rental market data', e);
+            return null;
+        }
+    }
+
+    function injectMarketRateBar(offerForm, costInputs, marketData) {
+        if (document.getElementById('torn-prop-market-bar')) {
+            console.log('Torn Props: Market bar already present, skipping');
+            return;
+        }
+
+        const { lowestRate, allMaxHappiness, cachedAt } = marketData;
+        const formattedRate = lowestRate.toLocaleString();
+        const nextUpdateTime = new Date((cachedAt || Date.now()) + CONFIG.RENTAL_MARKET_CACHE_DURATION).toLocaleTimeString();
+
+        const warningHtml = allMaxHappiness ? `
+            <div style="${STYLES.marketBar.warning}">
+                &#9888; All listed properties have max happiness &mdash; this price may not be fully representative.
+                <a href="https://www.torn.com/properties.php?step=rentalmarket#/property=13"
+                   target="_blank"
+                   style="${STYLES.marketBar.warningLink}">View rental market</a>
+            </div>` : '';
+
+        const barHtml = `
+            <div id="torn-prop-market-bar" style="${STYLES.marketBar.bar}">
+                <div style="${STYLES.marketBar.title}">&#127965; Private Island Market Rate (max happiness only) &mdash; <a href="https://www.torn.com/properties.php?step=rentalmarket#/property=13" target="_blank" style="${STYLES.marketBar.warningLink}">view market</a></div>
+                <div style="${STYLES.marketBar.rate}">Lowest: $${formattedRate} / day</div>
+                <div style="${STYLES.marketBar.title}">Cache updates at ${nextUpdateTime}</div>
+                <button id="torn-prop-use-rate" style="${STYLES.marketBar.useBtn}">Use this price</button>
+                ${warningHtml}
+            </div>`;
+
+        offerForm.insertAdjacentHTML('afterend', barHtml);
+
+        document.getElementById('torn-prop-use-rate').addEventListener('click', function() {
+            const amountInput = document.querySelector('ul.offerExtension-input li.amount input.input-money');
+            const days = parseInt(amountInput?.value) || 1;
+            const totalCost = lowestRate * days;
+            costInputs.forEach(function(input) {
+                input.value = totalCost;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
+    }
+
     // Auto-fill functionality for offer forms (keeping this for user convenience)
     function observeOfferSubmissions() {
         const url = new URL(window.location.href);
@@ -1110,11 +1206,29 @@
                                     amountInput.dispatchEvent(new Event('change', { bubbles: true }));
                                     amountInput.dataset.processed = 'true';
                                 }
-                                
+
                                 costLi.dataset.processed = 'true';
-                                
+
                                 if (costLi.dataset.processed && amountInput?.dataset.processed) {
                                     observer.disconnect();
+                                }
+
+                                // Inject Private Island market rate bar if applicable
+                                const isPrivateIsland = document.body.innerText.includes('Private Island');
+                                console.log('Torn Props: Private Island detection:', isPrivateIsland);
+                                if (isPrivateIsland) {
+                                    const allCostInputs = costLi.querySelectorAll('input.offerExtension.input-money');
+                                    console.log('Torn Props: Cost inputs found:', allCostInputs.length);
+                                    fetchPrivateIslandRates().then(function(marketData) {
+                                        console.log('Torn Props: Market data result:', marketData);
+                                        if (marketData) {
+                                            const offerForm = document.querySelector('ul.offerExtension-input');
+                                            console.log('Torn Props: Offer form for injection:', offerForm);
+                                            if (offerForm && allCostInputs.length) {
+                                                injectMarketRateBar(offerForm, allCostInputs, marketData);
+                                            }
+                                        }
+                                    });
                                 }
                             }, 500);
                         }
