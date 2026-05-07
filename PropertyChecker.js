@@ -83,6 +83,16 @@
             warning: 'margin-top: 8px; font-size: 0.82em; color: #c8a040; padding: 6px 8px; background: rgba(200,160,64,0.1); border-radius: 4px;',
             warningLink: 'color: #d4a84b; text-decoration: underline; margin-left: 4px;'
         },
+        priceModal: {
+            overlay: 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 99999; display: flex; justify-content: center; align-items: center;',
+            box: 'background: #2a2a2a; border: 1px solid #555; border-radius: 8px; padding: 24px 28px; max-width: 380px; width: 90%; color: #fff; font-family: inherit;',
+            title: 'font-size: 1.1em; font-weight: bold; color: #e8a040; margin-bottom: 12px;',
+            body: 'font-size: 0.95em; color: #ddd; margin-bottom: 18px; line-height: 1.5;',
+            highlight: 'font-weight: bold; color: #fff;',
+            btnRow: 'display: flex; gap: 10px; justify-content: flex-end;',
+            btnCancel: 'background: #444; color: #fff; border: 1px solid #666; border-radius: 4px; padding: 8px 18px; cursor: pointer; font-size: 0.9em;',
+            btnConfirm: 'background: #7a2020; color: #fff; border: 1px solid #b03030; border-radius: 4px; padding: 8px 18px; cursor: pointer; font-size: 0.9em;'
+        },
         mobileTable: `
             @media screen and (max-width: 768px) {
                 table, thead, tbody, th, td {
@@ -208,7 +218,8 @@
         DEFAULT_RENTAL_AMOUNT: 'defaultRentalAmount',
         PROPERTY_ID_LAST_FETCHED: 'propertyId_lastFetched',
         RENTAL_MARKET_CACHE: 'rentalMarketCache_13',
-        RENTAL_MARKET_CACHE_TIME: 'rentalMarketCacheTime_13'
+        RENTAL_MARKET_CACHE_TIME: 'rentalMarketCacheTime_13',
+        UNDERCUT_PERCENT: 'undercutPercent'
     };
 
     const STATUS_DISPLAY = {
@@ -715,6 +726,7 @@
                         ${createInputCard('API Key', 'api-key-input', false, localStorage.getItem('tornApiKey') || '')}
                         ${createInputCard('Default Rental Period (days)', 'default-rental-period', false, localStorage.getItem('defaultRentalPeriod') || '30')}
                         ${createInputCard('Default Amount ($)', 'default-rental-amount', false, localStorage.getItem('defaultRentalAmount') || '23000000')}
+                        ${createInputCard('Undercut % (e.g. 1 = 1%)', 'undercut-percent', false, localStorage.getItem('undercutPercent') || '1')}
                         <button class="save-settings" style="${STYLES.stats.calculateButton}">
                             Save Settings 💾
                         </button>
@@ -1022,6 +1034,7 @@
                 const apiKey = statsSection.querySelector('.api-key-input').value.trim();
                 const rentalPeriod = statsSection.querySelector('.default-rental-period').value.trim();
                 const defaultRentalAmount = statsSection.querySelector('.default-rental-amount').value.trim();
+                const undercutPercent = statsSection.querySelector('.undercut-percent').value.trim();
 
                 // Validate inputs
                 const errors = [];
@@ -1036,6 +1049,10 @@
                 
                 if (defaultRentalAmount && (isNaN(defaultRentalAmount) || parseInt(defaultRentalAmount) < 1)) {
                     errors.push('Rental Amount must be a positive number');
+                }
+
+                if (undercutPercent && (isNaN(undercutPercent) || parseFloat(undercutPercent) <= 0 || parseFloat(undercutPercent) > 100)) {
+                    errors.push('Undercut % must be a number between 0 and 100');
                 }
                 
                 if (errors.length > 0) {
@@ -1056,7 +1073,13 @@
                     if (defaultRentalAmount) {
                         localStorage.setItem('defaultRentalAmount', defaultRentalAmount);
                     }
-                    
+
+                    if (undercutPercent) {
+                        localStorage.setItem('undercutPercent', undercutPercent);
+                        const undercutBtn = document.getElementById('torn-prop-undercut-rate');
+                        if (undercutBtn) undercutBtn.textContent = `Undercut ${parseFloat(undercutPercent)}%`;
+                    }
+
                     alert('Settings saved successfully!');
                     
                     // Refresh if API key changed
@@ -1144,20 +1167,31 @@
                 <div style="${STYLES.marketBar.rate}">Lowest: $${formattedRate} / day</div>
                 <div style="${STYLES.marketBar.title}">Cache updates at ${nextUpdateTime}</div>
                 <button id="torn-prop-use-rate" style="${STYLES.marketBar.useBtn}">Use this price</button>
+                <button id="torn-prop-undercut-rate" style="${STYLES.marketBar.useBtn}; margin-left: 8px;">Undercut ${parseFloat(localStorage.getItem(STORAGE_KEYS.UNDERCUT_PERCENT)) || 1}%</button>
                 ${warningHtml}
             </div>`;
 
         offerForm.insertAdjacentHTML('afterend', barHtml);
 
-        document.getElementById('torn-prop-use-rate').addEventListener('click', function() {
-            const amountInput = document.querySelector('ul.offerExtension-input li.amount input.input-money');
+        function applyRate(rate) {
+            const amountInput = document.querySelector('ul.offerExtension-input li.amount input.input-money')
+                || document.querySelector('#market ul.lease-input li.amount input.input-money');
             const days = parseInt(amountInput?.value) || 1;
-            const totalCost = lowestRate * days;
+            const totalCost = rate * days;
             costInputs.forEach(function(input) {
                 input.value = totalCost;
                 input.dispatchEvent(new Event('input', { bubbles: true }));
                 input.dispatchEvent(new Event('change', { bubbles: true }));
             });
+        }
+
+        document.getElementById('torn-prop-use-rate').addEventListener('click', function() {
+            applyRate(lowestRate);
+        });
+
+        document.getElementById('torn-prop-undercut-rate').addEventListener('click', function() {
+            const undercutPct = parseFloat(localStorage.getItem(STORAGE_KEYS.UNDERCUT_PERCENT)) || 1;
+            applyRate(Math.floor(lowestRate * (1 - undercutPct / 100)));
         });
     }
 
@@ -1171,8 +1205,40 @@
             console.log('Auto-filling form for property:', propertyId);
 
             const observer = new MutationObserver((mutations, obs) => {
+                const leaseMarketUl = document.querySelector('#market ul.lease-input');
+                if (leaseMarketUl) {
+                    const costLi = leaseMarketUl.querySelector('li.cost');
+                    const amountLi = leaseMarketUl.querySelector('li.amount');
+                    if (costLi && !costLi.dataset.marketBarInjected) {
+                        costLi.dataset.marketBarInjected = 'true';
+
+                        if (amountLi && !amountLi.dataset.processed) {
+                            const defaultPeriod = parseInt(localStorage.getItem('defaultRentalPeriod')) || 30;
+                            const daysInput = amountLi.querySelector('input.input-money:not([type=hidden])');
+                            if (daysInput) {
+                                daysInput.value = defaultPeriod.toString();
+                                daysInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                daysInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                amountLi.dataset.processed = 'true';
+                            }
+                        }
+
+                        const isPrivateIsland = document.body.innerText.includes('Private Island');
+                        if (isPrivateIsland) {
+                            const costInputs = costLi.querySelectorAll('input.lease.input-money');
+                            if (costInputs.length) {
+                                fetchPrivateIslandRates().then(function(marketData) {
+                                    if (marketData) {
+                                        injectMarketRateBar(leaseMarketUl, costInputs, marketData);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+
                 const offerExtensionUl = document.querySelector('ul.offerExtension-input');
-                
+
                 if (offerExtensionUl) {
                     const costLi = offerExtensionUl.querySelector('li.cost');
                     const amountLi = offerExtensionUl.querySelector('li.amount');
