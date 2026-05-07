@@ -1272,7 +1272,8 @@
         }
 
         const submitBtn = findSubmitButton();
-        if (submitBtn) {
+        if (submitBtn && !submitBtn.dataset.priceGuardAttached) {
+            submitBtn.dataset.priceGuardAttached = 'true';
             submitBtn.addEventListener('click', handleSubmitClick, { capture: true });
         }
     }
