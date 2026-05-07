@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      4.1.2
+// @version      4.2.0
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -1219,6 +1219,7 @@
                 || document.querySelector('#market ul.lease-input li.amount input.input-money');
             const days = parseInt(amountInput?.value) || 1;
             const totalCost = rate * days;
+            lastTrackedPerDay = rate;
             costInputs.forEach(function(input) {
                 input.value = totalCost;
                 input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1235,11 +1236,41 @@
             applyRate(Math.floor(lowestRate * (1 - undercutPct / 100)));
         });
 
+        // Track the per-day cost ourselves — React-controlled inputs reset .value to their internal
+        // state after re-renders, so we can't reliably read it back from the DOM at submit time.
+        const _defaultAmt = parseInt(localStorage.getItem(STORAGE_KEYS.DEFAULT_RENTAL_AMOUNT)) || 23000000;
+        const _defaultDays = parseInt(localStorage.getItem(STORAGE_KEYS.DEFAULT_RENTAL_PERIOD)) || 30;
+        let lastTrackedPerDay = Math.round(_defaultAmt / _defaultDays);
+
+        // Keep tracking if user manually types in the cost field
+        const _trackInput = offerForm.querySelector('li.cost input[type="text"]');
+        if (_trackInput) {
+            _trackInput.addEventListener('input', function() {
+                const v = parseInt(String(_trackInput.value).replace(/[^0-9]/g, '')) || 0;
+                const _amt = document.querySelector('ul.offerExtension-input li.amount input.input-money')
+                    || document.querySelector('#market ul.lease-input li.amount input.input-money');
+                const d = parseInt(_amt?.value) || 1;
+                if (v > 0) lastTrackedPerDay = Math.max(1, Math.round(v / d));
+            });
+        }
+
         let submitConfirmed = false;
 
         function findSubmitButton() {
-            return document.querySelector('li.submit button')
-                || document.querySelector('button[type="submit"]');
+            const byLi = document.querySelector('li.submit button, li.submit input[type="submit"]');
+            if (byLi) return byLi;
+
+            // Torn's "SEND OFFER" is <input type="submit"> inside the <form> — search the form and its parent
+            const formEl = offerForm.closest('form');
+            const ancestor = formEl
+                || offerForm.closest('section, #market, .market-cont')
+                || offerForm.parentElement;
+            const candidates = ancestor ? [...ancestor.querySelectorAll('button, input[type="submit"]')] : [];
+            const byText = candidates.find(btn => {
+                const t = (btn.value || btn.textContent).trim().toLowerCase();
+                return t.includes('send') || t.includes('offer') || t === 'submit' || t === 'next';
+            });
+            return byText || null;
         }
 
         function attachSubmitGuard(submitBtn) {
@@ -1255,9 +1286,15 @@
                     || document.querySelector('#market ul.lease-input li.amount input.input-money');
                 const days = parseInt(amountInput?.value) || 1;
 
-                const rawCost = costInputs[0]?.value;
-                const totalCost = parseInt(String(rawCost).replace(/[^0-9]/g, '')) || 0;
-                const enteredPerDay = Math.round(totalCost / days);
+                const costLi = offerForm.querySelector('li.cost');
+                const allCostCandidates = costLi
+                    ? [...costLi.querySelectorAll('input')]
+                    : [...costInputs];
+                const liveCostInput = allCostCandidates.find(inp => inp.type === 'text' || inp.type === 'number') || allCostCandidates[0];
+                const rawCost = liveCostInput?.value;
+                const domCost = parseInt(String(rawCost).replace(/[^0-9]/g, '')) || 0;
+                const domPerDay = domCost > 0 ? Math.max(1, Math.round(domCost / days)) : 0;
+                const enteredPerDay = domPerDay || lastTrackedPerDay || 0;
 
                 if (!enteredPerDay || !lowestRate) return;
 
