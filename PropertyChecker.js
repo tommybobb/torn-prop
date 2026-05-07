@@ -1143,6 +1143,47 @@
         }
     }
 
+    function showPriceWarningModal(enteredPerDay, lowestRate, onConfirm) {
+        const existing = document.getElementById('torn-prop-price-modal');
+        if (existing) existing.remove();
+
+        const pct = Math.round(Math.abs(enteredPerDay - lowestRate) / lowestRate * 100);
+        const direction = enteredPerDay < lowestRate ? 'below' : 'above';
+        const dirColor = direction === 'below' ? '#e05050' : '#e8a040';
+
+        const overlayEl = document.createElement('div');
+        overlayEl.id = 'torn-prop-price-modal';
+        overlayEl.style.cssText = STYLES.priceModal.overlay;
+        overlayEl.innerHTML = `
+            <div style="${STYLES.priceModal.box}">
+                <div style="${STYLES.priceModal.title}">&#9888; Price Warning</div>
+                <div style="${STYLES.priceModal.body}">
+                    Your price of <span style="${STYLES.priceModal.highlight}">$${enteredPerDay.toLocaleString()}/day</span>
+                    is <span style="font-weight:bold;color:${dirColor}">${pct}% ${direction}</span>
+                    the market low of <span style="${STYLES.priceModal.highlight}">$${lowestRate.toLocaleString()}/day</span>.
+                </div>
+                <div style="${STYLES.priceModal.btnRow}">
+                    <button id="torn-prop-modal-cancel" style="${STYLES.priceModal.btnCancel}">Go Back</button>
+                    <button id="torn-prop-modal-confirm" style="${STYLES.priceModal.btnConfirm}">Submit Anyway</button>
+                </div>
+            </div>`;
+
+        document.body.appendChild(overlayEl);
+
+        document.getElementById('torn-prop-modal-cancel').addEventListener('click', function() {
+            overlayEl.remove();
+        });
+
+        document.getElementById('torn-prop-modal-confirm').addEventListener('click', function() {
+            overlayEl.remove();
+            onConfirm();
+        });
+
+        overlayEl.addEventListener('click', function(e) {
+            if (e.target === overlayEl) overlayEl.remove();
+        });
+    }
+
     function injectMarketRateBar(offerForm, costInputs, marketData) {
         if (document.getElementById('torn-prop-market-bar')) {
             console.log('Torn Props: Market bar already present, skipping');
