@@ -1242,39 +1242,43 @@
                 || document.querySelector('button[type="submit"]');
         }
 
-        function handleSubmitClick(e) {
-            if (submitConfirmed) {
-                submitConfirmed = false;
-                return;
-            }
+        function attachSubmitGuard(submitBtn) {
+            if (!submitBtn || submitBtn.dataset.priceGuardAttached) return;
+            submitBtn.dataset.priceGuardAttached = 'true';
+            submitBtn.addEventListener('click', function handleSubmitClick(e) {
+                if (submitConfirmed) {
+                    submitConfirmed = false;
+                    return;
+                }
 
-            const amountInput = document.querySelector('ul.offerExtension-input li.amount input.input-money')
-                || document.querySelector('#market ul.lease-input li.amount input.input-money');
-            const days = parseInt(amountInput?.value) || 1;
+                const amountInput = document.querySelector('ul.offerExtension-input li.amount input.input-money')
+                    || document.querySelector('#market ul.lease-input li.amount input.input-money');
+                const days = parseInt(amountInput?.value) || 1;
 
-            const rawCost = costInputs[0]?.value;
-            const totalCost = parseInt(String(rawCost).replace(/[^0-9]/g, '')) || 0;
-            const enteredPerDay = Math.round(totalCost / days);
+                const rawCost = costInputs[0]?.value;
+                const totalCost = parseInt(String(rawCost).replace(/[^0-9]/g, '')) || 0;
+                const enteredPerDay = Math.round(totalCost / days);
 
-            if (!enteredPerDay || !lowestRate) return;
+                if (!enteredPerDay || !lowestRate) return;
 
-            const ratio = enteredPerDay / lowestRate;
-            if (ratio >= 0.75 && ratio <= 1.25) return;
+                const ratio = enteredPerDay / lowestRate;
+                if (ratio >= 0.75 && ratio <= 1.25) return;
 
-            e.preventDefault();
-            e.stopImmediatePropagation();
+                e.preventDefault();
+                e.stopImmediatePropagation();
 
-            showPriceWarningModal(enteredPerDay, lowestRate, function() {
-                submitConfirmed = true;
-                const btn = findSubmitButton();
-                if (btn) btn.click();
-            });
+                showPriceWarningModal(enteredPerDay, lowestRate, function() {
+                    submitConfirmed = true;
+                    submitBtn.click();
+                });
+            }, { capture: true });
         }
 
-        const submitBtn = findSubmitButton();
-        if (submitBtn && !submitBtn.dataset.priceGuardAttached) {
-            submitBtn.dataset.priceGuardAttached = 'true';
-            submitBtn.addEventListener('click', handleSubmitClick, { capture: true });
+        const immediateBtn = findSubmitButton();
+        if (immediateBtn) {
+            attachSubmitGuard(immediateBtn);
+        } else {
+            setTimeout(function() { attachSubmitGuard(findSubmitButton()); }, 300);
         }
     }
 
