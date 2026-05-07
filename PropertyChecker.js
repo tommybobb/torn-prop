@@ -1234,6 +1234,47 @@
             const undercutPct = parseFloat(localStorage.getItem(STORAGE_KEYS.UNDERCUT_PERCENT)) || 1;
             applyRate(Math.floor(lowestRate * (1 - undercutPct / 100)));
         });
+
+        let submitConfirmed = false;
+
+        function findSubmitButton() {
+            return document.querySelector('li.submit button')
+                || document.querySelector('button[type="submit"]');
+        }
+
+        function handleSubmitClick(e) {
+            if (submitConfirmed) {
+                submitConfirmed = false;
+                return;
+            }
+
+            const amountInput = document.querySelector('ul.offerExtension-input li.amount input.input-money')
+                || document.querySelector('#market ul.lease-input li.amount input.input-money');
+            const days = parseInt(amountInput?.value) || 1;
+
+            const rawCost = costInputs[0]?.value;
+            const totalCost = parseInt(String(rawCost).replace(/[^0-9]/g, '')) || 0;
+            const enteredPerDay = Math.round(totalCost / days);
+
+            if (!enteredPerDay || !lowestRate) return;
+
+            const ratio = enteredPerDay / lowestRate;
+            if (ratio >= 0.75 && ratio <= 1.25) return;
+
+            e.preventDefault();
+            e.stopImmediatePropagation();
+
+            showPriceWarningModal(enteredPerDay, lowestRate, function() {
+                submitConfirmed = true;
+                const btn = findSubmitButton();
+                if (btn) btn.click();
+            });
+        }
+
+        const submitBtn = findSubmitButton();
+        if (submitBtn) {
+            submitBtn.addEventListener('click', handleSubmitClick, { capture: true });
+        }
     }
 
     // Auto-fill functionality for offer forms (keeping this for user convenience)
