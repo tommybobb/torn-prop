@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Properties Manager
 // @namespace    http://tampermonkey.net/
-// @version      4.2.0
+// @version      4.2.1
 // @description  Adds a property management dashboard to Torn's properties page with expiration tracking, offer status, and pagination
 // @author       beans_ [174079]
 // @match        https://www.torn.com/properties.php*
@@ -650,8 +650,8 @@
 
             let properties = allProperties
                 .filter(([id, prop]) =>
-                    // Keep properties that are not "none" status owned by others
-                    !(prop.status === "none" && Number(prop.owner.id) !== Number(currentUserId)) && 
+                    // Exclude properties not owned by the current user (e.g. PIs they rent from others)
+                    Number(prop.owner.id) === Number(currentUserId) &&
                     // Exclude in_use properties
                     prop.status !== "in_use"
                 )
